@@ -1,0 +1,14 @@
+guild_id: 1457854914343735550
+
+roles:
+  admin: 1457861701302223094
+  moderator: 0
+  member: 1457861755429458124
+
+log_channels:
+  moderation: 0
+  bot: 0
+  
+log_channels:
+  bot: 1457866580020166853
+  moderation: 0
