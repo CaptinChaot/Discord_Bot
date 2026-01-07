@@ -1,0 +1,22 @@
+2026-01-05 23:51:00,096 | INFO | Shard ID None has connected to Gateway (Session ID: 1e9dd58651f4acae66b5324b0dbee564).
+2026-01-06 00:00:27,894 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 00:00:50,525 | INFO | ROLE REMOVE | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:53:54,611 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:56:05,915 | INFO | ROLE REMOVE | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:56:05,990 | INFO | ROLE REMOVE | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:56:06,419 | ERROR | Fehler bei Slash Command: Command 'role_remove' raised an exception: HTTPException: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2026-01-06 23:56:13,662 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:56:13,870 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:56:14,256 | ERROR | Fehler bei Slash Command: Command 'role_add' raised an exception: HTTPException: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2026-01-06 23:58:57,986 | INFO | ROLE REMOVE | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-06 23:59:06,859 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:08:04,682 | ERROR | Fehler bei Slash Command: Command 'role_remove' raised an exception: NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2026-01-07 00:08:22,157 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:08:22,160 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:08:22,682 | ERROR | Fehler bei Slash Command: Command 'role_add' raised an exception: NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2026-01-07 00:08:39,947 | ERROR | Fehler bei Slash Command: Command 'role_remove' raised an exception: NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2026-01-07 00:09:01,960 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:09:01,965 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:09:02,661 | ERROR | Fehler bei Slash Command: Command 'role_add' raised an exception: HTTPException: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2026-01-07 00:11:15,861 | INFO | ROLE ADD | captinchaot -> captinchaot | 1457861755429458124:tester
+2026-01-07 00:11:43,645 | INFO | ROLE REMOVE | captinchaot -> captinchaot | 1457861755429458124:tester
