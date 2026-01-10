@@ -30,6 +30,7 @@ class ChaosBot(commands.Bot):
         await self.load_extension("cogs.admin")
         await self.load_extension("cogs.fun")
         await self.load_extension("cogs.roles")
+        await self.load_extension("cogs.moderation")
 
         # Slash Commands instant auf Testserver
         guild = discord.Object(id=TEST_GUILD_ID)
