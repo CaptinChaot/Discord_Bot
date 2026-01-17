@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from utils.logger import logger, log_to_channel
 from utils.config import config
 from discord import app_commands
+from utils.warnings_db import init_db
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -16,6 +17,7 @@ TEST_GUILD_ID = config.guild_id  # dein Testserver
 intents = discord.Intents.default()
 intents.message_content = False
 
+init_db()
 
 class ChaosBot(commands.Bot):
     def __init__(self):
@@ -24,7 +26,6 @@ class ChaosBot(commands.Bot):
             intents=intents,
             help_command=None,
         )
-
     async def setup_hook(self):
         # Cogs laden
         await self.load_extension("cogs.admin")

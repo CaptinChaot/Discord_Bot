@@ -7,6 +7,8 @@ from utils.config import config
 from utils.logger import logger, log_to_channel
 from discord.utils import utcnow
 from utils.checks import has_mod_permissions
+from utils.warnings_db import add_warning, count_warnings
+
 
 
 
@@ -81,3 +83,81 @@ class Moderation(commands.Cog):
         )
 async def setup(bot): #immer NUR 1  IN CODE PRO COG
     await bot.add_cog(Moderation(bot)) 
+
+    @app_commands.command(
+        name="warn",
+        description="Verwarnt einen User und loggt es im Modlog"
+    )
+    @app_commands.describe(
+        user="User, der verwarnt werden soll",
+        reason="Grund für die Verwarnung"
+    )
+    async def warn(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+
+        # Selbstschutz
+        if user == interaction.user:
+            await interaction.followup.send(
+                "❌ Du kannst dich nicht selbst verwarnen.",
+                ephemeral=True
+            )
+            return
+
+        # DM an User (optional, aber Standard)
+        try:
+            await user.send(
+                f"⚠️ **Verwarnung auf {interaction.guild.name}**\n"
+                f"**Grund:** {reason}\n"
+                f"**Moderator:** {interaction.user}"
+            )
+        except discord.Forbidden:
+            pass  # DMs aus → egal, Log zählt
+
+        # Warnung in DB speichern
+        add_warning(
+            guild_id=interaction.guild.id,
+            user_id=user.id,
+            moderator_id=interaction.user.id,
+            reason=reason,
+        )
+        # Anzahl der Verwarnungen holen
+        total_warnings = count_warnings(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        )
+        # Modlog Embed
+        embed = discord.Embed(
+            title="⚠️ Verwarnung",
+            color=discord.Color.orange(),
+            timestamp=utcnow()
+        )
+        embed.add_field(name="User", value=f"{user} ({user.id})", inline=False)
+        embed.add_field(name="Anzahl der Verwarnungen", value=str(total_warnings), inline=False)
+        embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)
+        embed.add_field(name="Grund", value=reason, inline=False)
+
+        modlog_channel = self.bot.get_channel(config.MODLOG_CHANNEL_ID)
+        if modlog_channel:
+            await modlog_channel.send(embed=embed)
+
+        await interaction.followup.send(
+            f"✅ {user.mention} wurde verwarnt.",
+            ephemeral=True
+        )
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Moderation(bot))
+
