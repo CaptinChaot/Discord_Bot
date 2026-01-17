@@ -22,3 +22,24 @@ def init_db():
             created_at TEXT NOT NULL
         )
         """)
+def add_warning(guild_id: int, user_id: int, moderator_id: int, reason: str):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (guild_id, user_id, moderator_id, reason, datetime.utcnow().isoformat())
+        )
+
+
+def count_warnings(guild_id: int, user_id: int) -> int:
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT COUNT(*) FROM warnings
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id)
+        )
+        return cur.fetchone()[0]
