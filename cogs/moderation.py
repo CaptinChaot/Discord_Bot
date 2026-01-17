@@ -48,7 +48,7 @@ class Moderation(commands.Cog):
                 )
         logger.info(
     f"TIMEOUT | {interaction.user} -> {user} | {duration}s | {reason}"
-)
+        )
 
         await interaction.followup.send(
             f"✅ {user.mention} wurde für {duration} Sekunden in Timeout gesetzt. Grund: {reason}",
@@ -81,13 +81,8 @@ class Moderation(commands.Cog):
             f"✅ Timeout von {user.mention} wurde entfernt.",
             ephemeral=True
         )
-async def setup(bot): #immer NUR 1  IN CODE PRO COG
-    await bot.add_cog(Moderation(bot)) 
 
-    @app_commands.command(
-        name="warn",
-        description="Verwarnt einen User und loggt es im Modlog"
-    )
+    @app_commands.command(name="warn",description="Verwarnt einen User und loggt es im Modlog")
     @app_commands.describe(
         user="User, der verwarnt werden soll",
         reason="Grund für die Verwarnung"
@@ -149,10 +144,11 @@ async def setup(bot): #immer NUR 1  IN CODE PRO COG
         embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)
         embed.add_field(name="Grund", value=reason, inline=False)
 
-        modlog_channel = self.bot.get_channel(config.MODLOG_CHANNEL_ID)
-        if modlog_channel:
-            await modlog_channel.send(embed=embed)
-
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            modlog_channel = self.bot.get_channel(channel_id)
+            if modlog_channel:
+                await modlog_channel.send(embed=embed)
         await interaction.followup.send(
             f"✅ {user.mention} wurde verwarnt.",
             ephemeral=True
