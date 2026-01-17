@@ -53,3 +53,25 @@ def delete_warnings(guild_id: int, user_id: int):
             """,
             (guild_id, user_id)
         )
+
+def get_last_warning_id(guild_id: int, user_id: int) -> int | None:
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT id FROM warnings
+            WHERE guild_id = ? AND user_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (guild_id, user_id)
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def delete_warning_by_id(warn_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM warnings WHERE id = ?",
+            (warn_id,)
+        )

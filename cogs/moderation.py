@@ -10,10 +10,17 @@ from utils.checks import has_mod_permissions
 from utils.warnings_db import (
     add_warning,
     count_warnings,
-    delete_warnings as db_delete_warnings
+    delete_warnings as db_delete_warnings,
+    delete_warning_by_id, get_last_warning_id
 )
 
 
+mod_cfg = config.moderation
+
+timeout_warn = mod_cfg.get("warn_timeout_threshold", 2)
+timeout_duration = mod_cfg.get("warn_timeout_duration", 300)
+kick_warn = mod_cfg.get("warn_kick_threshold", 3)
+ban_warn = mod_cfg.get("warn_ban_threshold", 5)
 
 
 
@@ -138,6 +145,73 @@ class Moderation(commands.Cog):
             guild_id=interaction.guild.id,
             user_id=user.id
         )
+
+       # --- Sicherheitschecks vor Auto-Maßnahmen ---
+        if user.bot:
+            return
+
+        # Bot darf User moderieren?
+        bot_member = interaction.guild.me or interaction.guild.get_member(self.bot.user.id)
+        if not bot_member:
+            return
+        if user.top_role >= bot_member.top_role:
+            logger.warning(
+                f"AUTO ACTION BLOCKED | Bot-Rolle zu niedrig für {user} ({user.id})"
+            )
+            return
+
+        # User noch im Server?
+        if not interaction.guild.get_member(user.id):
+            return
+
+
+        # --- Automatische Maßnahmen ---
+        if total_warnings == timeout_warn:
+            until = utcnow() + timedelta(seconds=timeout_duration)
+            await user.timeout(
+                until,
+                reason="Automatischer Timeout durch Verwarnungen"
+            )
+            logger.info(
+                f"AUTO TIMEOUT | {user} | {timeout_duration}s | {total_warnings} Warns"
+            )
+
+        elif total_warnings == kick_warn:
+            try:
+                await user.send(
+                    f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
+                    f"**Grund:** Automatischer Kick durch Verwarnungen\n"
+                    f"**Moderator:** System"
+                )
+            except discord.Forbidden:
+                pass
+
+            await user.kick(reason="Automatischer Kick durch Verwarnungen")
+            logger.info(
+                f"AUTO KICK | {user} | {total_warnings} Warns"
+            )
+
+            # Optional, aber empfohlen:
+            # db_delete_warnings(interaction.guild.id, user.id)
+
+        elif total_warnings == ban_warn:
+            try:
+                await user.send(
+                    f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
+                    f"**Grund:** Automatischer Ban durch Verwarnungen\n"
+                    f"**Moderator:** System"
+                )
+            except discord.Forbidden:
+                pass
+
+            await user.ban(
+                reason="Automatischer Ban durch Verwarnungen",
+                delete_message_days=0
+            )
+            logger.info(
+                f"AUTO BAN | {user} | {total_warnings} Warns"
+            )
+
         # Modlog Embed
         embed = discord.Embed(
             title="⚠️ Verwarnung",
@@ -251,11 +325,307 @@ class Moderation(commands.Cog):
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id != 0:
             modlog_channel = self.bot.get_channel(channel_id)
-        if modlog_channel:
-            await modlog_channel.send(embed=embed)
+            if modlog_channel:
+                await modlog_channel.send(embed=embed)
 # EINMAL antworten
         await interaction.followup.send(
             f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
+            ephemeral=True
+        )
+    @app_commands.command(name="unwarn", description="Löscht die letzte Verwarnung eines Users")
+    @app_commands.describe(
+        user="User, dessen letzte Verwarnung gelöscht werden soll"
+    )
+    async def unwarn(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        if user.bot:
+            await interaction.followup.send(
+                "❌ Bots können keine Verwarnungen haben.",
+                ephemeral=True
+            )
+            return        
+        
+        # Letzte Verwarnung ID holen
+        warn_id = get_last_warning_id(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        )
+        if warn_id is None:
+            await interaction.followup.send(
+                f" {user.mention} hat keine Verwarnungen.",
+                ephemeral=True
+            )
+            return
+        
+        # Letzte Verwarnung löschen
+        delete_warning_by_id(warn_id)
+
+        embed = discord.Embed(
+            title="🧹 Letzte Verwarnung gelöscht",
+            color=discord.Color.orange(),
+            timestamp=utcnow()
+        )
+        embed.add_field(name="User", value=f"{user} ({user.id})", inline=False)
+        embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)    
+
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            modlog_channel = self.bot.get_channel(channel_id)
+            if modlog_channel:
+                await modlog_channel.send(embed=embed)
+
+        await interaction.followup.send(
+            f"✅ Die letzte Verwarnung von {user.mention} wurde gelöscht.",
+            ephemeral=True
+            )
+
+    @app_commands.command(name="kick", description="Kickt einen User aus dem Server")
+    @app_commands.describe(
+        user="User, der gekickt werden soll",
+        reason="Grund für den Kick"
+    )
+    async def kick(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str = "Kein Grund angegeben"
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+
+        # Selbstschutz
+        if user == interaction.user:
+            await interaction.followup.send(
+                "❌ Du kannst dich nicht selbst kicken.",
+                ephemeral=True
+            )
+            return
+        if user.top_role >= interaction.user.top_role:
+            await interaction.followup.send(
+                "❌ Du kannst keinen User mit einer gleichen oder höheren Rolle kicken.",
+                ephemeral=True
+            )
+            return
+        if user.top_role >= interaction.guild.me.top_role:
+            await interaction.followup.send(
+                "❌ Ich kann keinen User mit einer gleichen oder höheren Rolle kicken.",
+                ephemeral=True
+            )
+            return
+        if user.bot:
+            await interaction.followup.send(
+                "❌ Bots können nicht gekickt werden.",
+                ephemeral=True
+            )
+            return  
+        try:
+            await user.send(
+                f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
+                f"**Grund:** {reason}\n"
+                f"**Moderator:** {interaction.user}"
+            )
+        except discord.Forbidden:
+            pass  # DMs aus → egal, Kick zählt
+        # Kick ausführen
+        await user.kick(reason=reason)
+
+        # Loggen
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                f"👢 User gekickt",
+                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
+                f"**User:** {user.mention} (ID: {user.id})\n"
+                f"**Grund:** {reason}\n",
+                discord.Color.red(),
+            )
+        logger.info(f"KICK | {interaction.user} -> {user} | {reason}")
+
+        await interaction.followup.send(
+            f"✅ {user.mention} wurde gekickt. Grund: {reason}",
+            ephemeral=True
+        )
+
+    @app_commands.command(name="ban", description="Bannt einen User vom Server")
+    @app_commands.describe(
+        user="User, der gebannt werden soll",
+        reason="Grund für den Ban"
+    )
+    async def ban(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str = "Kein Grund angegeben"
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+
+        # Selbstschutz
+        if user == interaction.user:
+            await interaction.followup.send(
+                "❌ Du kannst dich nicht selbst bannen.",
+                ephemeral=True
+            )
+            return
+        if user.top_role >= interaction.user.top_role:
+            await interaction.followup.send(
+                "❌ Du kannst keinen User mit einer gleichen oder höheren Rolle bannen.",
+                ephemeral=True
+            )
+            return
+        if user.top_role >= interaction.guild.me.top_role:
+            await interaction.followup.send(
+                "❌ Ich kann keinen User mit einer gleichen oder höheren Rolle bannen.",
+                ephemeral=True
+            )
+            return
+        if user.id == interaction.guild.owner_id:
+            await interaction.followup.send(
+                "❌ Du kannst den Serverbesitzer nicht bannen.",
+                ephemeral=True
+            )
+            return
+        try:
+            await user.send(
+                f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
+                f"**Grund:** {reason}\n"
+                f"**Moderator:** {interaction.user}"
+            )
+        except discord.Forbidden:
+            pass  # DMs aus → egal, Ban zählt
+        # Ban ausführen
+        try:
+            await user.ban(reason=reason, delete_message_days=0)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Ich habe keine Berechtigung, diesen User zu bannen.",
+                ephemeral=True
+            )
+            return    
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "❌ Beim Bannen des Users ist ein Fehler aufgetreten.",
+                ephemeral=True
+            )
+            return
+
+        # Loggen
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                f"🔨 User gebannt",
+                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
+                f"**User:** {user.mention} (ID: {user.id})\n"
+                f"**Grund:** {reason}\n",
+                discord.Color.dark_red(),
+            )
+        logger.info(f"BAN | {interaction.user} -> {user} | {reason}")
+
+        await interaction.followup.send(
+            f"✅ {user.mention} wurde gebannt. Grund: {reason}",
+            ephemeral=True
+        )
+    @app_commands.command(name="unban", description="Entbannt einen User vom Server")
+    @app_commands.describe(
+        user_id="ID des Users, der entbannt werden soll",
+        reason="Grund für den Unban"
+    )
+    async def unban(
+        self,
+        interaction: discord.Interaction,
+        user_id: int,
+        reason: str = "Kein Grund angegeben"
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        # User holen
+        try:
+            user = await self.bot.fetch_user(user_id)
+        except discord.NotFound:
+            await interaction.followup.send(
+                "❌ User nicht gefunden.",
+                ephemeral=True
+            )
+            return
+        # prüfen ob user gebannt ist
+        try:
+            ban_entry = await interaction.guild.fetch_ban(user)
+        except discord.NotFound:
+            await interaction.followup.send(
+                "❌ Der User ist nicht gebannt.",
+                ephemeral=True
+            )
+            return
+
+        # Unban ausführen
+        try:
+            await interaction.guild.unban(user, reason=reason)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Ich habe keine Berechtigung, diesen User zu entbannen.",
+                ephemeral=True
+            )
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "❌ Beim Entbannen des Users ist ein Fehler aufgetreten.",
+                ephemeral=True
+            )
+            return
+
+        # Loggen
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                f"🔨 User entbannt",
+                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
+                f"**User:** {user} (ID: {user.id})\n"
+                f"**Grund:** {reason}\n",
+                discord.Color.green(),
+            )
+        logger.info(f"UNBAN | {interaction.user} -> {user} | {reason}")
+
+        await interaction.followup.send(
+            f"✅ {user.mention} wurde entbannt. Grund: {reason}",
             ephemeral=True
         )
 async def setup(bot: commands.Bot):

@@ -22,6 +22,10 @@ class Config:
     @property
     def log_channels(self) -> dict:
         return self._data.get("log_channels", {})
+    
+    @property
+    def moderation(self) -> dict:
+        return self._data.get("moderation", {})
 
 # Singleton
 config = Config()
