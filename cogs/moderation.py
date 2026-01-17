@@ -220,15 +220,42 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-        
+        # Anzahl VOR dem Löschen holen
+        total_warnings = count_warnings(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+            )
+
+            # Wenn es nichts zu löschen gibt
+        if total_warnings == 0:
+            await interaction.followup.send(
+                f"ℹ️ {user.mention} hat keine Verwarnungen.",
+                ephemeral=True
+            )
+            return
         # Verwarnungen löschen
         db_delete_warnings(
             guild_id=interaction.guild.id,
             user_id=user.id
         )
 
+        embed = discord.Embed(
+            title="🧹 Verwarnungen gelöscht",
+            color=discord.Color.orange(),
+            timestamp=utcnow()
+        )
+        embed.add_field(name="User", value=f"{user} ({user.id})", inline=False)
+        embed.add_field(name="Anzahl gelöscht", value=str(total_warnings), inline=False)
+        embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)
+
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            modlog_channel = self.bot.get_channel(channel_id)
+        if modlog_channel:
+            await modlog_channel.send(embed=embed)
+# EINMAL antworten
         await interaction.followup.send(
-            f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
+        f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
             ephemeral=True
         )
 async def setup(bot: commands.Bot):
