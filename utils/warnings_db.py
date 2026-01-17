@@ -43,3 +43,13 @@ def count_warnings(guild_id: int, user_id: int) -> int:
             (guild_id, user_id)
         )
         return cur.fetchone()[0]
+    
+def delete_warnings(guild_id: int, user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM warnings
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id)
+        )

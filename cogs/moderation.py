@@ -7,7 +7,12 @@ from utils.config import config
 from utils.logger import logger, log_to_channel
 from discord.utils import utcnow
 from utils.checks import has_mod_permissions
-from utils.warnings_db import add_warning, count_warnings
+from utils.warnings_db import (
+    add_warning,
+    count_warnings,
+    delete_warnings as db_delete_warnings
+)
+
 
 
 
@@ -154,6 +159,79 @@ class Moderation(commands.Cog):
             ephemeral=True
         )
 
+    @app_commands.command(name="warnings", description="Zeigt die Anzahl der Verwarnungen eines Users an")
+    @app_commands.describe(
+        user="User, dessen Verwarnungen angezeigt werden sollen"
+    )  
+
+    async def warnings(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        if user.bot:
+            await interaction.followup.send(
+                "❌ Bots können keine Verwarnungen haben.",
+                ephemeral=True
+            )
+            return
+        
+        # Anzahl der Verwarnungen holen
+        total_warnings = count_warnings(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        )
+
+        await interaction.followup.send(
+            f"ℹ️ {user.mention} hat {total_warnings} Verwarnung(en).",
+            ephemeral=True
+        )
+
+    @app_commands.command(name="delete_warnings", description="Löscht alle Verwarnungen eines Users")
+    @app_commands.describe(
+        user="User, dessen Verwarnungen gelöscht werden sollen"
+    )
+    async def delete_warnings(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        if user.bot:
+            await interaction.followup.send(
+                "❌ Bots können keine Verwarnungen haben.",
+                ephemeral=True
+            )
+            return
+        
+        # Verwarnungen löschen
+        db_delete_warnings(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        )
+
+        await interaction.followup.send(
+            f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
+            ephemeral=True
+        )
 async def setup(bot: commands.Bot):
     await bot.add_cog(Moderation(bot))
+
 
