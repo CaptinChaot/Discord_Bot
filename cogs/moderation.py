@@ -219,7 +219,7 @@ class Moderation(commands.Cog):
                 "❌ Bots können keine Verwarnungen haben.",
                 ephemeral=True
             )
-            return
+            return        
         # Anzahl VOR dem Löschen holen
         total_warnings = count_warnings(
             guild_id=interaction.guild.id,
@@ -255,7 +255,7 @@ class Moderation(commands.Cog):
             await modlog_channel.send(embed=embed)
 # EINMAL antworten
         await interaction.followup.send(
-        f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
+            f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
             ephemeral=True
         )
 async def setup(bot: commands.Bot):
