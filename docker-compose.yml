@@ -1,0 +1,10 @@
+services:
+  discordbot:
+    build: .
+    container_name: discordbot
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: unless-stopped

@@ -1,3 +1,5 @@
+#Start
+update.sh
 # Python
 __pycache__/
 *.pyc
@@ -12,3 +14,10 @@ venv/
 logs/
 *.log
 bot.log
+
+#Backups
+*.save
+
+
+#Data
+data/*.db
