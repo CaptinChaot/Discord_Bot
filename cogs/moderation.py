@@ -177,38 +177,42 @@ class Moderation(commands.Cog):
                     f"AUTO TIMEOUT | {user} | {timeout_duration}s | {total_warnings} Warns"
                 )
 
-        elif total_warnings == kick_warn:
-            try:
-                await user.send(
-                    f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
-                    f"**Grund:** Automatischer Kick durch Verwarnungen\n"
-                    f"**Moderator:** System"
-                    )
-            except discord.Forbidden:
-                pass
+            elif total_warnings == kick_warn:
+                try:
+                    await user.send(
+                        f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
+                        f"**Grund:** Automatischer Kick durch Verwarnungen\n"
+                        f"**Moderator:** System"
+                        )
+                except discord.Forbidden:
+                    pass
 
-            await user.kick(reason="Automatischer Kick durch Verwarnungen")
-            logger.info(
-                f"AUTO KICK | {user} | {total_warnings} Warns"
-            )
-
-        elif total_warnings == ban_warn:
-            try:
-                await user.send(
-                    f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
-                    f"**Grund:** Automatischer Ban durch Verwarnungen\n"
-                    f"**Moderator:** System"
+                await user.kick(reason="Automatischer Kick durch Verwarnungen")
+                logger.info(
+                    f"AUTO KICK | {user} | {total_warnings} Warns"
                 )
-            except discord.Forbidden:
-                pass
 
-            await user.ban(
-                reason="Automatischer Ban durch Verwarnungen",
-                delete_message_days=0
-            )
-            logger.info(
-                f"AUTO BAN | {user} | {total_warnings} Warns"
-            )
+            elif total_warnings == ban_warn:
+                try:
+                    await user.send(
+                        f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
+                        f"**Grund:** Automatischer Ban durch Verwarnungen\n"
+                        f"**Moderator:** System"
+                    )
+                except discord.Forbidden:
+                    pass
+
+                await user.ban(
+                    reason="Automatischer Ban durch Verwarnungen",
+                    delete_message_days=0
+                )
+                logger.info(
+                    f"AUTO BAN | {user} | {total_warnings} Warns"
+                )
+                await interaction.followup.send(
+                    f"✅ {user.mention} wurde verwarnt.",
+                        ephemeral=True
+                )
 
         # Modlog Embed
         embed = discord.Embed(
@@ -233,6 +237,10 @@ class Moderation(commands.Cog):
             except Exception as e:
                 logger.exception(f"MODLOG | Unbekannter Fehler: {e}")
 
+        await interaction.followup.send(
+        f"✅ {user.mention} wurde verwarnt.",
+        ephemeral=True
+    )
 
     @app_commands.command(name="warnings", description="Zeigt die Anzahl der Verwarnungen eines Users an")
     @app_commands.describe(
