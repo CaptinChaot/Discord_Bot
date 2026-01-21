@@ -146,35 +146,36 @@ class Moderation(commands.Cog):
             user_id=user.id
         )
 
-       # --- Sicherheitschecks vor Auto-Maßnahmen ---
-        if user.bot:
-            return
+       # --- Automatische Maßnahmen ---
+        can_auto_action = True
 
-        # Bot darf User moderieren?
-        bot_member = interaction.guild.me or interaction.guild.get_member(self.bot.user.id)
+        # Bots nicht automatisch bestrafen
+        if user.bot:
+            can_auto_action = False
+        # Bot-Mitglied sauber holen (kein deprecated me)
+        bot_member = interaction.guild.get_member(self.bot.user.id)
         if not bot_member:
-            return
-        if user.top_role >= bot_member.top_role:
+            can_auto_action = False
+        elif user.top_role >= bot_member.top_role:
             logger.warning(
                 f"AUTO ACTION BLOCKED | Bot-Rolle zu niedrig für {user} ({user.id})"
             )
-            return
-
+            can_auto_action = False
         # User noch im Server?
         if not interaction.guild.get_member(user.id):
-            return
+            can_auto_action = False
 
 
-        # --- Automatische Maßnahmen ---
-        if total_warnings == timeout_warn:
-            until = utcnow() + timedelta(seconds=timeout_duration)
-            await user.timeout(
-                until,
-                reason="Automatischer Timeout durch Verwarnungen"
-            )
-            logger.info(
-                f"AUTO TIMEOUT | {user} | {timeout_duration}s | {total_warnings} Warns"
-            )
+        if can_auto_action:
+            if total_warnings == timeout_warn:
+                until = utcnow() + timedelta(seconds=timeout_duration)
+                await user.timeout(
+                    until,
+                    reason="Automatischer Timeout durch Verwarnungen"
+                )
+                logger.info(
+                    f"AUTO TIMEOUT | {user} | {timeout_duration}s | {total_warnings} Warns"
+                )
 
         elif total_warnings == kick_warn:
             try:
@@ -182,7 +183,7 @@ class Moderation(commands.Cog):
                     f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
                     f"**Grund:** Automatischer Kick durch Verwarnungen\n"
                     f"**Moderator:** System"
-                )
+                    )
             except discord.Forbidden:
                 pass
 
@@ -190,9 +191,6 @@ class Moderation(commands.Cog):
             logger.info(
                 f"AUTO KICK | {user} | {total_warnings} Warns"
             )
-
-            # Optional, aber empfohlen:
-            # db_delete_warnings(interaction.guild.id, user.id)
 
         elif total_warnings == ban_warn:
             try:
@@ -225,13 +223,16 @@ class Moderation(commands.Cog):
 
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id != 0:
-            modlog_channel = self.bot.get_channel(channel_id)
-            if modlog_channel:
+            try:
+                modlog_channel = await self.bot.fetch_channel(channel_id)
                 await modlog_channel.send(embed=embed)
-        await interaction.followup.send(
-            f"✅ {user.mention} wurde verwarnt.",
-            ephemeral=True
-        )
+            except discord.NotFound:
+                logger.error(f"MODLOG | Channel {channel_id} nicht gefunden")
+            except discord.Forbidden:
+                logger.error(f"MODLOG | Keine Rechte für Channel {channel_id}")
+            except Exception as e:
+                logger.exception(f"MODLOG | Unbekannter Fehler: {e}")
+
 
     @app_commands.command(name="warnings", description="Zeigt die Anzahl der Verwarnungen eines Users an")
     @app_commands.describe(
