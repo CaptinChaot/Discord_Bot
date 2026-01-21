@@ -11,8 +11,8 @@ log_channels:
   moderation: 1461013968335409388
 
 
-  moderation:
-    warn_kick_threshold: 3
-    warn_ban_threshold: 5
-    warn_timeout_threshold: 2
-    warn_timeout_duration: 300 # in seconds
+moderation:
+  warn_kick_threshold: 3
+  warn_ban_threshold: 5
+  warn_timeout_threshold: 2
+  warn_timeout_duration: 300 # in seconds
