@@ -12,3 +12,10 @@ venv/
 logs/
 *.log
 bot.log
+
+#Backups
+*.save
+
+
+#Data
+data/*.db
