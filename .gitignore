@@ -1,3 +1,5 @@
+#Start
+update.sh
 # Python
 __pycache__/
 *.pyc
