@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
-
+from fastapi.responses import RedirectResponse
 from utils.auth import require_auth
 
 load_dotenv()
@@ -11,7 +11,7 @@ load_dotenv()
 def create_api(bot):
     app = FastAPI(title="ChaosBot API")
 
-     # ---------------------------
+    # ---------------------------
     # STATIC FILES (DASHBOARD)
     # ---------------------------
     app.mount(
@@ -19,6 +19,9 @@ def create_api(bot):
         StaticFiles(directory="web", html=True),
         name="web"
     )
+    @app.get("/")
+    async def root():
+        return RedirectResponse(url="/web/dashboard.html")
     # ---------------------------
     # Session Middleware
     # ---------------------------
