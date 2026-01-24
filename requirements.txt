@@ -4,4 +4,6 @@ PyYAML
 aiohttp
 fastapi
 uvicorn[standard]
+python-multipart
+
 
