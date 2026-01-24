@@ -154,18 +154,23 @@ class Moderation(commands.Cog):
         if user.bot:
             can_auto_action = False
         # Bot-Mitglied sauber holen (kein deprecated me)
-        bot_member = interaction.guild.get_member(self.bot.user.id) or interaction.guild.me
+        bot_member = interaction.guild.me
         if not bot_member:
-            can_auto_action = False
-        elif user.top_role >= bot_member.top_role:
-            logger.warning(
-                f"AUTO ACTION BLOCKED | Bot-Rolle zu niedrig für {user} ({user.id})"
-            )
-            can_auto_action = False
-        # User noch im Server?
-        if not interaction.guild.get_member(user.id):
+            logger.error("AUTO ACTION BLOCKED | Konnte Bot-Mitglied nicht holen")
             can_auto_action = False
 
+        # Rolle des Users höher/gleich der Bot-Rolle?    
+        elif user.top_role >= bot_member.top_role:
+            logger.warning(
+                f"AUTO ACTION BLOCKED | Bot-Rolle zu niedrig "
+                f"(user={user.top_role.position}, bot={bot_member.top_role.position})"
+            )
+            can_auto_action = False
+        
+        logger.info(
+            f"AUTO CHECK | can_auto_action={can_auto_action} | "
+            f"user={user} | warns={total_warnings}"
+        )
 
         if can_auto_action:
             last_action = get_last_auto_action(
