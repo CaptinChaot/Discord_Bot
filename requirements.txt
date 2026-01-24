@@ -2,3 +2,6 @@ discord.py
 python-dotenv
 PyYAML
 aiohttp
+fastapi
+uvicorn
+
