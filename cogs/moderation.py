@@ -744,7 +744,6 @@ class Moderation(commands.Cog):
             f"✅ {user.mention} wurde entbannt. Grund: {reason}",
             ephemeral=True
         )
-
     @app_commands.command(name="userinfo", description="Zeigt Informationen an")
     @app_commands.describe(
         user="User, über den Informationen angezeigt werden sollen"
@@ -807,7 +806,75 @@ class Moderation(commands.Cog):
             embed=embed,
             ephemeral=True
         )
-async def setup(bot: commands.Bot):
+
+    @app_commands.command(name="clear", description="Löscht Nachrichten in einem Kanal")
+    @app_commands.describe(
+        amount="Anzahl der zu löschenden Nachrichten (1 - 100)"
+    )
+    async def clear(
+        self,
+        interaction: discord.Interaction,
+        amount: int
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        if amount < 1 or amount > 100:
+            await interaction.followup.send(
+                "❌ Die Anzahl muss zwischen 1 und 100 liegen.",
+                ephemeral=True
+            )
+            return
+        channel = interaction.channel
+        # Sicherstellen, dass der Kanal Textkanal ist
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.followup.send(
+                "❌ Dieser Befehl kann nur in Textkanälen verwendet werden.",
+                ephemeral=True
+            )
+            return
+         # Nachrichten löschen  
+        try:
+            deleted = await channel.purge(limit=amount + 1) # +1 um die Befehlsnachricht einzuschließen
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Ich habe keine Berechtigung, Nachrichten zu löschen.",
+                ephemeral=True
+            )
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "❌ Beim Löschen der Nachrichten ist ein Fehler aufgetreten.",
+                ephemeral=True
+            )
+            return
+        #Modlog
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id != 0:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                f"🧹 Nachrichten gelöscht",
+                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
+                f"**Kanal:** {channel.mention} (ID: {channel.id})\n"
+                f"**Anzahl der gelöschten Nachrichten:** {len(deleted)-1}\n",
+                discord.Color.orange(),
+            )
+            logger.info(f"CLEAR | {interaction.user} | Kanal: {channel} | {len(deleted)-1} Nachrichten gelöscht")
+        await interaction.followup.send(
+            f"✅ {len(deleted)-1} Nachrichten wurden gelöscht.",
+            ephemeral=True
+        )
+async def setup(bot: commands.Bot):    
     await bot.add_cog(Moderation(bot))
+    
+
+
 
 

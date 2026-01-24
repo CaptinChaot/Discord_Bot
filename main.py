@@ -50,9 +50,6 @@ def start_api(bot):
             
 @bot.event
 async def on_ready():
-    logger.info(
-        f"DISCORD LIB CHECK | version={discord.__version__} | file={discord.__file__}"
-    )
     print(f"✅ Eingeloggt als {bot.user} (ID: {bot.user.id})")
 
     #FastAPI parallel starten
