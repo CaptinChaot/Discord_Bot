@@ -12,6 +12,10 @@ from utils.config import config
 from discord import app_commands
 from utils.warnings_db import init_db
 
+print("discord module:", discord)
+print("version:", discord.__version__)
+print("file:", discord.__file__)
+
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
