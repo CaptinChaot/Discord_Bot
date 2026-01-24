@@ -3,5 +3,5 @@ python-dotenv
 PyYAML
 aiohttp
 fastapi
-uvicorn
+uvicorn[standard]
 
