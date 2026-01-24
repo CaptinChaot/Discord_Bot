@@ -12,9 +12,6 @@ from utils.config import config
 from discord import app_commands
 from utils.warnings_db import init_db
 
-print("discord module:", discord)
-print("version:", discord.__version__)
-print("file:", discord.__file__)
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -53,6 +50,9 @@ def start_api(bot):
             
 @bot.event
 async def on_ready():
+    logger.info(
+        f"DISCORD LIB CHECK | version={discord.__version__} | file={discord.__file__}"
+    )
     print(f"✅ Eingeloggt als {bot.user} (ID: {bot.user.id})")
 
     #FastAPI parallel starten
