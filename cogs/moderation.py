@@ -11,7 +11,8 @@ from utils.warnings_db import (
     add_warning,
     count_warnings,
     delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id
+    delete_warning_by_id, get_last_warning_id,
+    get_last_auto_action, set_last_auto_action,
 )
 
 
@@ -153,7 +154,7 @@ class Moderation(commands.Cog):
         if user.bot:
             can_auto_action = False
         # Bot-Mitglied sauber holen (kein deprecated me)
-        bot_member = interaction.guild.get_member(self.bot.user.id)
+        bot_member = interaction.guild.get_member(self.bot.user.id) or interaction.guild.me
         if not bot_member:
             can_auto_action = False
         elif user.top_role >= bot_member.top_role:
@@ -167,17 +168,59 @@ class Moderation(commands.Cog):
 
 
         if can_auto_action:
-            if total_warnings == timeout_warn:
-                until = utcnow() + timedelta(seconds=timeout_duration)
-                await user.timeout(
-                    until,
-                    reason="Automatischer Timeout durch Verwarnungen"
-                )
-                logger.info(
-                    f"AUTO TIMEOUT | {user} | {timeout_duration}s | {total_warnings} Warns"
-                )
+            last_action = get_last_auto_action(
+                guild_id=interaction.guild.id,
+                user_id=user.id
+            )
+            if total_warnings >= ban_warn and last_action != "ban":
+                try:
+                    await user.send(
+                        f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
+                        f"**Grund:** Automatischer Bann durch Verwarnungen\n"
+                        f"**Moderator:** System"
+                    )
+                except discord.Forbidden:
+                    pass
 
-            elif total_warnings == kick_warn:
+                try:
+                    await user.ban(
+                        reason="Automatischer Bann durch Verwarnungen",delete_message_days=0
+                    )
+                except discord.Forbidden:
+                    logger.error(
+                        f"AUTO BAN FAILED | Keine Rechte zum Bannen von {user} ({user.id})"
+                    )
+                    
+                    return
+                except discord.HTTPException:
+                    logger.error(
+                        f"AUTO BAN FAILED | HTTPException beim Bannen von {user} ({user.id})"
+                    )
+                    return
+                
+                channel_id = int(config.log_channels.get("moderation", 0))
+                if channel_id != 0:
+                    await log_to_channel(
+                        self.bot,
+                        channel_id,
+                        f"🔨 AUTO BANN",
+                        f"**User:** {user} (ID: {user.id})\n"
+                        f"**Auslöser:** Auto-System\n"
+                        f"**Grund:** Automatischer Bann durch Verwarnungen\n"
+                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
+                        discord.Color.dark_red(),
+                    )
+                logger.info(
+                    f"AUTO BANN | {user} | {total_warnings} Warns"
+                )
+                set_last_auto_action(
+                    guild_id=interaction.guild.id,
+                    user_id=user.id,
+                    action="ban"
+                )
+                return
+            
+            elif total_warnings >= kick_warn and last_action not in ("kick", "ban"):
                 try:
                     await user.send(
                         f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
@@ -186,34 +229,93 @@ class Moderation(commands.Cog):
                         )
                 except discord.Forbidden:
                     pass
+                try:
+                    await user.kick(reason="Automatischer Kick durch Verwarnungen")
 
-                await user.kick(reason="Automatischer Kick durch Verwarnungen")
+                except discord.Forbidden:
+                    logger.error(
+                        f"AUTO KICK FAILED | Keine Rechte zum Kicken von {user} ({user.id})"
+                    )
+                    return
+                except discord.HTTPException:
+                    logger.error(
+                        f"AUTO KICK FAILED | HTTPException beim Kicken von {user} ({user.id})"
+                    )
+                    return
+
+                channel_id = int(config.log_channels.get("moderation", 0))
+                if channel_id != 0:
+                    await log_to_channel(
+                        self.bot,
+                        channel_id,
+                        f"👢 AUTO KICK",
+                        f"**User:** {user} (ID: {user.id})\n"
+                        f"**Auslöser:** Auto-System\n"
+                        f"**Grund:** Automatischer Kick durch Verwarnungen\n"
+                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
+                        discord.Color.dark_red(),
+                    )
                 logger.info(
                     f"AUTO KICK | {user} | {total_warnings} Warns"
                 )
-
-            elif total_warnings == ban_warn:
+                set_last_auto_action(
+                    guild_id=interaction.guild.id,
+                    user_id=user.id,
+                    action="kick"
+                )
+                return
+            
+            elif total_warnings >= timeout_warn and last_action is None:
                 try:
                     await user.send(
-                        f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
-                        f"**Grund:** Automatischer Ban durch Verwarnungen\n"
+                        f"⏱️ **Du wurdest von {interaction.guild.name} in Timeout gesetzt**\n"
+                        f"**Grund:** Automatischer Timeout durch Verwarnungen\n"
                         f"**Moderator:** System"
                     )
                 except discord.Forbidden:
                     pass
-
-                await user.ban(
-                    reason="Automatischer Ban durch Verwarnungen",
-                    delete_message_days=0
-                )
+                
+                try:
+                    until = utcnow() + timedelta(seconds=timeout_duration)#
+                    await user.timeout(
+                        until,
+                        reason="Automatischer Timeout durch Verwarnungen"
+                    )
+                except discord.Forbidden:
+                    logger.error(
+                        f"AUTO TIMEOUT FAILED | Keine Rechte zum Timeout von {user} ({user.id})"
+                    )
+                    return
+                except discord.HTTPException:
+                    logger.error(
+                        f"AUTO TIMEOUT FAILED | HTTPException beim Timeout von {user} ({user.id})"
+                    )
+                    
+                    return
+                
+                channel_id = int(config.log_channels.get("moderation", 0))
+                if channel_id != 0:
+                    await log_to_channel(
+                        self.bot,
+                        channel_id,
+                        f"⏱️ AUTO TIMEOUT",
+                        f"**User:** {user} (ID: {user.id})\n"
+                        f"**Auslöser:** Auto-System\n"
+                        f"**Grund:** Automatischer Timeout durch Verwarnungen\n"
+                        f"**Dauer:** {timeout_duration} Sekunden\n"
+                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
+                        discord.Color.orange(),
+                    )
                 logger.info(
-                    f"AUTO BAN | {user} | {total_warnings} Warns"
+                    f"AUTO TIMEOUT | {user} | {total_warnings} Warns"
                 )
-                await interaction.followup.send(
-                    f"✅ {user.mention} wurde verwarnt.",
-                        ephemeral=True
+                set_last_auto_action(
+                    guild_id=interaction.guild.id,
+                    user_id=user.id,
+                    action="timeout"
                 )
-
+                return
+            
         # Modlog Embed
         embed = discord.Embed(
             title="⚠️ Verwarnung",

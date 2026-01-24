@@ -19,9 +19,18 @@ def init_db():
             user_id INTEGER NOT NULL,
             moderator_id INTEGER NOT NULL,
             reason TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            last_auto_action TEXT
         )
         """)
+
+        # Migration: falls alte DB ohne last_auto_action existiert
+        cur = conn.execute("PRAGMA table_info(warnings)")
+        columns = [row[1] for row in cur.fetchall()]
+        if "last_auto_action" not in columns:
+            conn.execute(
+                "ALTER TABLE warnings ADD COLUMN last_auto_action TEXT"
+            )
 def add_warning(guild_id: int, user_id: int, moderator_id: int, reason: str):
     with get_connection() as conn:
         conn.execute(
@@ -74,4 +83,30 @@ def delete_warning_by_id(warn_id: int):
         conn.execute(
             "DELETE FROM warnings WHERE id = ?",
             (warn_id,)
+        )
+def get_last_auto_action(guild_id: int, user_id: int) -> str | None:
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT last_auto_action
+            FROM warnings
+            WHERE guild_id = ? AND user_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (guild_id, user_id)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+
+def set_last_auto_action(guild_id: int, user_id: int, action: str):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE warnings
+            SET last_auto_action = ?
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (action, guild_id, user_id)
         )
