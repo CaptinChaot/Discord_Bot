@@ -309,7 +309,7 @@ class Moderation(commands.Cog):
             user_id=user.id
             )
 
-            # Wenn es nichts zu löschen gibt
+        # Wenn es nichts zu löschen gibt
         if total_warnings == 0:
             await interaction.followup.send(
                 f"ℹ️ {user.mention} hat keine Verwarnungen.",
@@ -336,7 +336,7 @@ class Moderation(commands.Cog):
             modlog_channel = self.bot.get_channel(channel_id)
             if modlog_channel:
                 await modlog_channel.send(embed=embed)
-# EINMAL antworten
+        # EINMAL antworten
         await interaction.followup.send(
             f"✅ Alle Verwarnungen von {user.mention} wurden gelöscht.",
             ephemeral=True

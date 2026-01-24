@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>ChaosBot Admin Panel • V3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            chaosRed: '#ff1a1a',
+            chaosDark: '#050505',
+            chaosPanel: '#090909',
+          },
+          boxShadow: {
+            glow: '0 0 26px rgba(255, 26, 26, 0.62)',
+            glowSoft: '0 0 14px rgba(255, 26, 26, 0.42)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Holographic HUD Layering (keine Frameworks) */
+    .hud-bg {
+      background:
+        radial-gradient(80% 60% at 20% 10%, rgba(255,26,26,0.16), transparent 55%),
+        radial-gradient(70% 60% at 80% 90%, rgba(255,26,26,0.10), transparent 60%),
+        linear-gradient(180deg, rgba(255,26,26,0.06), transparent 22%, rgba(255,26,26,0.03));
+    }
+
+    .hud-grid::before{
+      content:"";
+      position:absolute; inset:0;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 46px 46px;
+      opacity: .14;
+      pointer-events:none;
+      mask-image: radial-gradient(circle at 50% 20%, black 0%, black 40%, transparent 72%);
+    }
+
+    .hud-scanlines::after{
+      content:"";
+      position:absolute; inset:0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.05),
+        rgba(255,255,255,0.05) 1px,
+        transparent 1px,
+        transparent 6px
+      );
+      opacity: .08;
+      pointer-events:none;
+    }
+
+    /* Corner brackets for panels */
+    .corner-brackets{
+      position: relative;
+    }
+    .corner-brackets::before,
+    .corner-brackets::after{
+      content:"";
+      position:absolute;
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,26,26,0.55);
+      filter: drop-shadow(0 0 10px rgba(255,26,26,0.35));
+      pointer-events:none;
+    }
+    .corner-brackets::before{ top:10px; left:10px; border-right:0; border-bottom:0; }
+    .corner-brackets::after{ bottom:10px; right:10px; border-left:0; border-top:0; }
+
+    /* Subtle animated pulse (clean) */
+    @keyframes hudPulse { 0%,100%{ opacity:.55 } 50%{ opacity:.95 } }
+    .hud-pulse{ animation: hudPulse 3.2s ease-in-out infinite; }
+
+    /* Smooth log scroll effect */
+    @keyframes floatIn { from { transform: translateY(-6px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+    .log-item{ animation: floatIn .18s ease-out; }
+  </style>
+</head>
+
+<body class="bg-black text-gray-200 font-mono min-h-screen flex relative overflow-x-hidden">
+  <!-- Global HUD -->
+  <div class="absolute inset-0 hud-bg hud-grid hud-scanlines pointer-events-none"></div>
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-[#030303] border-r border-gray-800 fixed h-full flex flex-col p-6 gap-6 z-10">
+    <div class="flex items-center gap-3">
+      <img src="./assests/CHAOSBOT_LOGO.png" alt="ChaosBot"
+           class="w-11 h-11 rounded-lg border border-gray-800 shadow-glowSoft" />
+      <div>
+        <h1 class="text-lg font-bold text-white tracking-wide">ChaosBot</h1>
+        <p class="text-xs text-gray-500">CC Admin Panel • V3</p>
+      </div>
+    </div>
+
+    <div class="bg-chaosPanel border border-gray-800 rounded-xl p-3 text-xs space-y-1 corner-brackets">
+      <div class="flex justify-between"><span class="text-gray-400">Server</span><span class="text-white" id="serverName">—</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Users</span><span class="text-green-400" id="serverUsers">—</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Bot</span><span class="text-green-400" id="botStatus">—</span></div>
+    </div>
+
+    <nav class="flex flex-col gap-2 text-sm">
+      <button class="px-3 py-2 rounded-lg bg-chaosPanel border border-gray-800 hover:shadow-glowSoft hover:border-chaosRed/60 transition text-left">
+        Dashboard
+      </button>
+      <button class="px-3 py-2 rounded-lg bg-chaosPanel border border-gray-800 hover:shadow-glowSoft hover:border-chaosRed/60 transition text-left">
+        Moderation
+      </button>
+      <button class="px-3 py-2 rounded-lg bg-chaosPanel border border-gray-800 hover:shadow-glowSoft hover:border-chaosRed/60 transition text-left">
+        Users
+      </button>
+      <button class="px-3 py-2 rounded-lg bg-chaosPanel border border-gray-800 hover:shadow-glowSoft hover:border-chaosRed/60 transition text-left">
+        Roles
+      </button>
+      <button class="px-3 py-2 rounded-lg bg-chaosPanel border border-gray-800 hover:shadow-glowSoft hover:border-chaosRed/60 transition text-left">
+        Settings
+      </button>
+    </nav>
+
+    <div class="mt-auto text-xs text-gray-500">
+      <div class="flex items-center justify-between">
+        <span>API:</span>
+        <span id="apiState" class="text-gray-400">offline (fallback)</span>
+      </div>
+      <div class="mt-2 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-chaosRed hud-pulse"></span>
+        <span>CC HUD mode</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="ml-64 flex-1 p-10 space-y-8 relative z-10">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="text-2xl text-white font-semibold tracking-wide">Control Center</h2>
+        <p class="text-xs text-gray-500">Realtime moderation + system telemetry</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button id="btnOpenMod"
+          class="px-5 py-2 rounded-xl border border-chaosRed text-chaosRed hover:bg-chaosRed hover:text-white hover:shadow-glow transition">
+          Mod Actions
+        </button>
+        <button id="btnSync"
+          class="px-5 py-2 rounded-xl border border-gray-700 text-gray-200 hover:border-chaosRed/60 hover:shadow-glowSoft transition">
+          Force Sync
+        </button>
+      </div>
+    </header>
+
+    <!-- Top cards -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-chaosPanel border border-gray-800 rounded-xl p-6 hover:shadow-glow transition corner-brackets">
+        <p class="text-xs text-gray-500">Total Warns</p>
+        <h3 class="text-3xl font-bold text-white mt-2" id="warnCount">—</h3>
+        <p class="text-xs text-gray-500 mt-1">All-time warnings</p>
+      </div>
+
+      <div class="bg-chaosPanel border border-gray-800 rounded-xl p-6 hover:shadow-glow transition corner-brackets">
+        <p class="text-xs text-gray-500">Active Users</p>
+        <h3 class="text-3xl font-bold text-white mt-2" id="activeUsers">—</h3>
+        <p class="text-xs text-gray-500 mt-1">Currently online</p>
+      </div>
+
+      <div class="bg-chaosPanel border border-gray-800 rounded-xl p-6 hover:shadow-glow transition corner-brackets">
+        <p class="text-xs text-gray-500">Bot Status</p>
+        <div class="flex items-center gap-2 mt-2">
+          <span class="w-3 h-3 rounded-full bg-green-400" id="botDot"></span>
+          <span class="text-xl text-green-400 font-bold" id="botStatusMain">ONLINE</span>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Latency: <span id="latency">—</span>ms</p>
+      </div>
+    </section>
+
+    <!-- Users + Roles -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Users -->
+      <div class="bg-chaosPanel border border-gray-800 rounded-xl p-6 corner-brackets">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-white">Users</h3>
+          <div class="text-xs text-gray-500">status • role • badges</div>
+        </div>
+
+        <div id="userList" class="space-y-3 text-sm"></div>
+      </div>
+
+      <!-- Roles & Badges -->
+      <div class="bg-chaosPanel border border-gray-800 rounded-xl p-6 corner-brackets">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-white">Roles & Badges</h3>
+          <div class="text-xs text-gray-500">CC palette</div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 text-xs">
+          <span class="px-3 py-1 rounded-full bg-red-900/60 text-red-200 border border-red-600/60 hover:shadow-glowSoft transition">ADMIN</span>
+          <span class="px-3 py-1 rounded-full bg-yellow-900/60 text-yellow-200 border border-yellow-600/60 hover:shadow-glowSoft transition">MOD</span>
+          <span class="px-3 py-1 rounded-full bg-blue-900/60 text-blue-200 border border-blue-600/60 hover:shadow-glowSoft transition">VIP</span>
+          <span class="px-3 py-1 rounded-full bg-gray-800 text-gray-200 border border-gray-600/60 hover:shadow-glowSoft transition">MEMBER</span>
+          <span class="px-3 py-1 rounded-full bg-purple-900/60 text-purple-200 border border-purple-600/60 hover:shadow-glowSoft transition">BOT</span>
+
+          <span class="px-3 py-1 rounded-full bg-[#0b0b0b] text-gray-200 border border-gray-700 hover:shadow-glowSoft transition">✅ Verified</span>
+          <span class="px-3 py-1 rounded-full bg-[#0b0b0b] text-gray-200 border border-gray-700 hover:shadow-glowSoft transition">⭐ VIP</span>
+          <span class="px-3 py-1 rounded-full bg-[#0b0b0b] text-gray-200 border border-gray-700 hover:shadow-glowSoft transition">🛡️ Trusted</span>
+          <span class="px-3 py-1 rounded-full bg-[#0b0b0b] text-gray-200 border border-gray-700 hover:shadow-glowSoft transition">⚠️ Watchlist</span>
+        </div>
+
+        <div class="mt-6 bg-[#0b0b0b] border border-gray-800 rounded-xl p-4">
+          <div class="flex items-center justify-between text-xs text-gray-500">
+            <span>HUD Signal</span>
+            <span id="hudSignal">stable</span>
+          </div>
+          <div class="mt-3 h-2 bg-black/60 rounded-full border border-gray-800 overflow-hidden">
+            <div id="hudBar" class="h-full w-2/3 bg-chaosRed/70"></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Logs -->
+    <section class="bg-chaosPanel border border-gray-800 rounded-xl p-6 corner-brackets">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-white">Live Moderation Logs</h3>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-500">autoscroll</span>
+          <span class="w-2 h-2 rounded-full bg-chaosRed hud-pulse"></span>
+        </div>
+      </div>
+
+      <!-- “live scroll”: we prepend new logs and animate -->
+      <div id="logBox" class="h-72 overflow-hidden text-sm space-y-2"></div>
+    </section>
+  </main>
+
+  <!-- MODAL: Mod Actions -->
+  <div id="modModal" class="fixed inset-0 hidden z-50">
+    <div class="absolute inset-0 bg-black/70"></div>
+
+    <div class="relative max-w-2xl mx-auto mt-24 p-6">
+      <div class="bg-[#070707] border border-gray-800 rounded-2xl p-6 shadow-glowSoft corner-brackets">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h4 class="text-white text-lg font-semibold">Mod Actions</h4>
+            <p class="text-xs text-gray-500 mt-1">Target user + action + reason. API-ready payload.</p>
+          </div>
+          <button id="btnCloseMod" class="text-gray-400 hover:text-white transition">✕</button>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-gray-500">Target User</label>
+            <select id="targetUser" class="mt-2 w-full bg-black/50 border border-gray-800 rounded-xl px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-chaosRed/60">
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-gray-500">Timeout (minutes) (optional)</label>
+            <input id="timeoutMinutes" type="number" min="1" placeholder="e.g. 10"
+              class="mt-2 w-full bg-black/50 border border-gray-800 rounded-xl px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-chaosRed/60" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="text-xs text-gray-500">Reason</label>
+            <input id="reason" type="text" placeholder="Short, clear reason"
+              class="mt-2 w-full bg-black/50 border border-gray-800 rounded-xl px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-chaosRed/60" />
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <button data-action="WARN"
+            class="px-4 py-2 rounded-xl border border-chaosRed text-chaosRed hover:bg-chaosRed hover:text-white hover:shadow-glow transition">
+            Warn
+          </button>
+          <button data-action="TIMEOUT"
+            class="px-4 py-2 rounded-xl border border-gray-700 text-gray-200 hover:border-chaosRed/60 hover:shadow-glowSoft transition">
+            Timeout
+          </button>
+          <button data-action="KICK"
+            class="px-4 py-2 rounded-xl border border-gray-700 text-gray-200 hover:border-chaosRed/60 hover:shadow-glowSoft transition">
+            Kick
+          </button>
+          <button data-action="BAN"
+            class="px-4 py-2 rounded-xl border border-gray-700 text-gray-200 hover:border-chaosRed/60 hover:shadow-glowSoft transition">
+            Ban
+          </button>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between text-xs">
+          <div class="text-gray-500">
+            Endpoint: <span class="text-gray-200">POST /api/mod/action</span>
+          </div>
+          <div id="actionState" class="text-gray-400">idle</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===========================
+   API-ready config
+   =========================== */
+const API_BASE = ""; // z.B. "http://127.0.0.1:8000" wenn dein Python-Server läuft
+
+async function apiGet(path) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  return await res.json();
+}
+
+async function apiPost(path, body) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+  return await res.json();
+}
+
+/* ===========================
+   Fallback Fake data
+   =========================== */
+const fallback = {
+  server: { name: "CaptinChaot", users: 142 },
+  stats: { warns: 128, activeUsers: 42, bot: { status: "ONLINE", latency: 28 } },
+  users: [
+    { id: "1001", name:"User#1337", role:"ADMIN", status:"online", badges:["🛡️ Trusted","✅ Verified"] },
+    { id: "1002", name:"PlayerX", role:"MOD", status:"online", badges:["🛡️ Trusted"] },
+    { id: "1003", name:"TrollGuy", role:"MEMBER", status:"offline", badges:["⚠️ Watchlist"] },
+    { id: "9999", name:"ChaosBot", role:"BOT", status:"online", badges:["🤖 System"] }
+  ],
+  logs: [
+    "WARN | User#1337 | Spam",
+    "TIMEOUT | PlayerX | Toxicity",
+    "BAN | TrollGuy | Raid",
+    "INFO | ChaosBot | Auto moderation triggered"
+  ]
+};
+
+function setApiState(online) {
+  const el = document.getElementById("apiState");
+  el.textContent = online ? "online" : "offline (fallback)";
+  el.className = online ? "text-green-400" : "text-gray-400";
+}
+
+/* ===========================
+   UI helpers
+   =========================== */
+function rolePill(role) {
+  const map = {
+    ADMIN: "bg-red-900/60 text-red-200 border-red-600/60",
+    MOD: "bg-yellow-900/60 text-yellow-200 border-yellow-600/60",
+    VIP: "bg-blue-900/60 text-blue-200 border-blue-600/60",
+    MEMBER: "bg-gray-800 text-gray-200 border-gray-600/60",
+    BOT: "bg-purple-900/60 text-purple-200 border-purple-600/60",
+  };
+  return map[role] || "bg-[#0b0b0b] text-gray-200 border-gray-700";
+}
+
+function statusDot(status) {
+  return status === "online" ? "bg-green-400" : "bg-gray-600";
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&","&amp;").replaceAll("<","&lt;")
+    .replaceAll(">","&gt;").replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+/* ===========================
+   Render
+   =========================== */
+function renderAll(data) {
+  // Sidebar stats
+  document.getElementById("serverName").textContent = data.server?.name ?? "—";
+  document.getElementById("serverUsers").textContent = data.server?.users ?? "—";
+  document.getElementById("botStatus").textContent = data.stats?.bot?.status ?? "—";
+
+  // Top cards
+  document.getElementById("warnCount").textContent = data.stats?.warns ?? "—";
+  document.getElementById("activeUsers").textContent = data.stats?.activeUsers ?? "—";
+  document.getElementById("latency").textContent = data.stats?.bot?.latency ?? "—";
+
+  const mainStatus = (data.stats?.bot?.status ?? "OFFLINE").toUpperCase();
+  const dot = document.getElementById("botDot");
+  const text = document.getElementById("botStatusMain");
+  if (mainStatus === "ONLINE") {
+    dot.className = "w-3 h-3 rounded-full bg-green-400";
+    text.className = "text-xl text-green-400 font-bold";
+    text.textContent = "ONLINE";
+  } else {
+    dot.className = "w-3 h-3 rounded-full bg-chaosRed";
+    text.className = "text-xl text-chaosRed font-bold";
+    text.textContent = "OFFLINE";
+  }
+
+  // Users list
+  const list = document.getElementById("userList");
+  list.innerHTML = "";
+  (data.users || []).forEach(u => {
+    list.innerHTML += `
+      <div class="bg-[#0b0b0b] border border-gray-800 rounded-xl px-4 py-3 hover:shadow-glowSoft hover:border-chaosRed/40 transition">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full ${statusDot(u.status)}"></span>
+            <div class="min-w-0">
+              <div class="text-white truncate">${escapeHtml(u.name)}</div>
+              <div class="text-xs text-gray-500">id: ${escapeHtml(u.id)}</div>
+            </div>
+          </div>
+          <span class="px-3 py-1 rounded-full border text-xs ${rolePill(u.role)}">${escapeHtml(u.role)}</span>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2 text-xs">
+          ${(u.badges || []).map(b => `<span class="px-3 py-1 rounded-full bg-black/40 border border-gray-800 text-gray-200">${escapeHtml(b)}</span>`).join("")}
+        </div>
+      </div>
+    `;
+  });
+
+  // Modal target dropdown
+  const sel = document.getElementById("targetUser");
+  sel.innerHTML = "";
+  (data.users || []).forEach(u => {
+    // Bot kann man optional rausfiltern – ich lass ihn drin, du kannst später sperren.
+    const opt = document.createElement("option");
+    opt.value = u.id;
+    opt.textContent = `${u.name} (${u.role})`;
+    sel.appendChild(opt);
+  });
+
+  // HUD meter (nur Optik)
+  const bar = document.getElementById("hudBar");
+  const signal = document.getElementById("hudSignal");
+  const lvl = Math.max(15, Math.min(95, (data.stats?.activeUsers || 30)));
+  bar.style.width = `${lvl}%`;
+  signal.textContent = lvl > 60 ? "hot" : "stable";
+}
+
+/* ===========================
+   Logs: “live scroll” stream
+   =========================== */
+const logBox = document.getElementById("logBox");
+let logPool = [...fallback.logs];
+
+function pushLogLine(line) {
+  const el = document.createElement("div");
+  el.className = "log-item bg-[#0b0b0b] border border-gray-800 rounded-xl px-4 py-2 text-gray-300 hover:shadow-glowSoft hover:border-chaosRed/30 transition";
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${line}`;
+  logBox.prepend(el);
+  if (logBox.children.length > 14) logBox.removeChild(logBox.lastChild);
+}
+
+function startLogStream() {
+  setInterval(() => {
+    const pick = logPool[Math.floor(Math.random()*logPool.length)];
+    pushLogLine(pick);
+  }, 1200);
+}
+
+/* ===========================
+   Data load (API → fallback)
+   =========================== */
+async function loadDashboard() {
+  try {
+    // Erwartete Endpoints (Python):
+    // GET /api/dashboard -> { server, stats }
+    // GET /api/users     -> { users: [...] }
+    // GET /api/logs      -> { logs: [...] }
+    const [dash, users, logs] = await Promise.all([
+      apiGet("/api/dashboard"),
+      apiGet("/api/users"),
+      apiGet("/api/logs")
+    ]);
+
+    setApiState(true);
+    const merged = {
+      server: dash.server,
+      stats: dash.stats,
+      users: users.users || [],
+      logs: logs.logs || []
+    };
+
+    logPool = merged.logs.length ? merged.logs : logPool;
+    renderAll(merged);
+  } catch (e) {
+    setApiState(false);
+    logPool = fallback.logs;
+    renderAll(fallback);
+  }
+}
+
+/* ===========================
+   Mod actions (API-ready)
+   =========================== */
+const modModal = document.getElementById("modModal");
+document.getElementById("btnOpenMod").addEventListener("click", () => modModal.classList.remove("hidden"));
+document.getElementById("btnCloseMod").addEventListener("click", () => modModal.classList.add("hidden"));
+modModal.addEventListener("click", (e) => { if (e.target === modModal) modModal.classList.add("hidden"); });
+
+document.querySelectorAll("[data-action]").forEach(btn => {
+  btn.addEventListener("click", async () => {
+    const action = btn.getAttribute("data-action");
+    const target_id = document.getElementById("targetUser").value;
+    const reason = document.getElementById("reason").value || "No reason provided";
+    const timeout_minutes = Number(document.getElementById("timeoutMinutes").value || 0);
+
+    const payload = { action, target_id, reason, timeout_minutes, source: "web-panel" };
+    const state = document.getElementById("actionState");
+
+    // UI quick sanity
+    if (action === "TIMEOUT" && timeout_minutes <= 0) {
+      state.className = "text-yellow-300";
+      state.textContent = "Timeout needs minutes > 0";
+      return;
+    }
+
+    try {
+      state.className = "text-gray-300";
+      state.textContent = "sending…";
+
+      // POST /api/mod/action
+      // Erwartete Python Response: { ok: true, message: "...", log: "..." }
+      const res = await apiPost("/api/mod/action", payload);
+      state.className = "text-green-400";
+      state.textContent = res.message || "ok";
+
+      // Wenn API einen Log liefert → direkt in Stream pushen
+      if (res.log) pushLogLine(res.log);
+      else pushLogLine(`${action} | ${target_id} | ${reason}`);
+
+    } catch (e) {
+      // fallback: nur UI loggen
+      state.className = "text-gray-400";
+      state.textContent = "offline → simulated";
+      pushLogLine(`${action} | ${target_id} | ${reason} (simulated)`);
+    }
+  });
+});
+
+document.getElementById("btnSync").addEventListener("click", loadDashboard);
+
+/* Boot */
+loadDashboard();
+startLogStream();
+</script>
+</body>
+</html>
