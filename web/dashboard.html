@@ -94,7 +94,7 @@
   <!-- Sidebar -->
   <aside class="w-64 bg-[#030303] border-r border-gray-800 fixed h-full flex flex-col p-6 gap-6 z-10">
     <div class="flex items-center gap-3">
-      <img src="./assests/CHAOSBOT_LOGO.png" alt="ChaosBot"
+      <img src="./assests/CHAOSBOT_LOGO.png" alt="ChaosBot Logo"
            class="w-11 h-11 rounded-lg border border-gray-800 shadow-glowSoft" />
       <div>
         <h1 class="text-lg font-bold text-white tracking-wide">ChaosBot</h1>
@@ -317,8 +317,10 @@ const API_BASE = ""; // z.B. "http://127.0.0.1:8000" wenn dein Python-Server lä
 
 async function apiGet(path) {
   const url = `${API_BASE}${path}`;
-  const res = await fetch(url, { headers: { "Accept": "application/json" } });
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  const res = await fetch(url, {
+    credentials: "include"
+  });
+  if (!res.ok) throw res;
   return await res.json();
 }
 
@@ -326,12 +328,14 @@ async function apiPost(path, body) {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify(body)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include"
   });
-  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+  if (!res.ok) throw res;
   return await res.json();
 }
+
 
 /* ===========================
    Fallback Fake data
@@ -475,6 +479,30 @@ function startLogStream() {
   }, 1200);
 }
 
+async function ensureAuth() {
+  const res = await fetch(API_BASE + "/api/dashboard", {
+    credentials: "include"
+  });
+
+  if (res.status === 401) {
+    const passphrase = prompt("Admin Passphrase:");
+    if (!passphrase) return false;
+
+    const login = await fetch(API_BASE + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passphrase }),
+      credentials: "include"
+    });
+
+    if (!login.ok) {
+      alert("Login fehlgeschlagen");
+      return false;
+    }
+  }
+  return true;
+}
+
 /* ===========================
    Data load (API → fallback)
    =========================== */
@@ -558,8 +586,15 @@ document.querySelectorAll("[data-action]").forEach(btn => {
 document.getElementById("btnSync").addEventListener("click", loadDashboard);
 
 /* Boot */
-loadDashboard();
-startLogStream();
+/* Boot */
+(async () => {
+  const ok = await ensureAuth();
+  if (!ok) return;
+
+  loadDashboard();
+  startLogStream();
+})();
+
 </script>
 </body>
 </html>

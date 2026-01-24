@@ -1,11 +1,8 @@
-from fastapi import Header, HTTPException
+from fastapi import Request, HTTPException
 
-API_TOKEN = "CHANGE_ME_LONG_RANDOM"
-
-def verify_token(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Missing token")
-
-    token = authorization.split(" ", 1)[1]
-    if token != API_TOKEN:
-        raise HTTPException(403, "Invalid token")
+def require_auth(request: Request):
+    """
+    Prüft, ob eine gültige Admin-Session existiert.
+    """
+    if not request.session.get("auth"):
+        raise HTTPException(status_code=401, detail="Not authenticated")

@@ -1,7 +1,10 @@
 import os
 import asyncio
 import discord
+import threading
+import uvicorn
 
+from api.app import create_api
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.logger import logger, log_to_channel
@@ -40,9 +43,25 @@ class ChaosBot(commands.Bot):
 
 bot = ChaosBot()
 
+def start_api(bot):
+    app = create_api(bot)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+            
 @bot.event
 async def on_ready():
     print(f"✅ Eingeloggt als {bot.user} (ID: {bot.user.id})")
+
+    #FastAPI parallel starten
+    if not hasattr(bot, "_api_started"):
+        bot._api_started = True
+
+        thread  = threading.Thread(
+            target=start_api,
+            args=(bot,),
+            daemon=True
+        )
+        thread.start()
+        print("🌐 API-Server gestartet.")
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN fehlt in .env")
