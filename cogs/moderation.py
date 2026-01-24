@@ -777,7 +777,7 @@ class Moderation(commands.Cog):
         ) or "Keine"
         #timeout info
         is_timed_out = user.is_timed_out()
-        timeout_until = (discord.utils.format_dt(user.timed_out_until, style="F") 
+        timeout_until = (discord.utils.format_dt(user.communication_disabled_until, style="F") 
                          if is_timed_out else "-"
         )
         
