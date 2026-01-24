@@ -744,6 +744,69 @@ class Moderation(commands.Cog):
             f"✅ {user.mention} wurde entbannt. Grund: {reason}",
             ephemeral=True
         )
+
+    @app_commands.command(name="userinfo", description="Zeigt Informationen an")
+    @app_commands.describe(
+        user="User, über den Informationen angezeigt werden sollen"
+    )
+    async def userinfo(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        #permission Check
+        if not has_mod_permissions(interaction):
+            await interaction.followup.send(
+                "❌ Keine Berechtigung.",
+                ephemeral=True
+            )
+            return
+        #basic info embed
+        account_created = discord.utils.format_dt(user.created_at, style="F")
+        joined_at = discord.utils.format_dt(user.joined_at, style="F") if user.joined_at else "Unbekannt"
+        #warnings count
+        total_warnings = count_warnings(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        )
+        last_action = get_last_auto_action(
+            guild_id=interaction.guild.id,
+            user_id=user.id
+        ) or "Keine"
+        #timeout info
+        is_timed_out = user.is_timed_out()
+        timeout_until = (discord.utils.format_dt(user.timed_out_until, style="F") 
+                         if is_timed_out else "-"
+        )
+        
+        embed = discord.Embed(
+            title=f"ℹ️ Userinfo: {user}",
+            color=discord.Color.blue(),
+            timestamp=utcnow()
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        embed.add_field(name="User-ID", value=str(user.id), inline=False)
+        embed.add_field(name="Account erstellt am", value=account_created, inline=False)
+        embed.add_field(name="Server beigetreten am", value=joined_at, inline=False)
+        
+        embed.add_field(name="Moderation", 
+                        value=(
+                        f"**Letzte Auto-Aktion:** {last_action}\n"
+                        f"**Verwarnungen:** {total_warnings}\n"
+                        f"**Aktiver Timeout:** {'Ja' if is_timed_out else 'Nein'}\n"),
+                    inline=False)
+        
+        if is_timed_out:
+            embed.add_field(name="Timeout bis", value=timeout_until, inline=False)
+
+        embed.add_field(name="Top-Rolle", value=user.top_role.mention if user.top_role else "—", inline=False)
+        await interaction.followup.send(
+            embed=embed,
+            ephemeral=True
+        )
 async def setup(bot: commands.Bot):
     await bot.add_cog(Moderation(bot))
 
