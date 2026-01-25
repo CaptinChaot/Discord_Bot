@@ -439,7 +439,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-
+        from utils.warnings_db import save_ban
+        save_ban(interaction.guild.id, user.id, reason)
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id:
