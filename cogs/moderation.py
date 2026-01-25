@@ -13,7 +13,7 @@ from utils.decorators import require_perm
 from utils.warnings_db import (
     add_warning, count_warnings, delete_warnings as db_delete_warnings,
     delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout, clear_ban, clear_timeout, get_user_status)
-from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban)
+from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban, get_auto_action_preview)
 
 
 
@@ -557,6 +557,8 @@ class Moderation(commands.Cog):
             guild_id=interaction.guild.id,
             user_id=user.id
         )
+        auto_action_preview = get_auto_action_preview(total_warnings)
+        
         last_action = get_last_auto_action(
             guild_id=interaction.guild.id,
             user_id=user.id
@@ -593,7 +595,12 @@ class Moderation(commands.Cog):
             ),
             inline=False
         )
-
+        if auto_action_preview:
+            embed.add_field(
+            name="🔮 Auto-Aktion (Vorschau)",
+            value=f"Nächste: **{auto_action_preview}**",
+            inline=False
+        )
         #--- Aktueller Status ---
         embed.add_field(
             name="🚨 Aktueller Status",

@@ -1,7 +1,7 @@
 import discord
 from datetime import timedelta
 from discord.utils import utcnow
-
+from utils.config import config
 
 async def safe_timeout(
     member: discord.Member,
@@ -102,4 +102,27 @@ async def safe_unban(
         return False, "Discord hat das Unbannen blockiert (keine Rechte)."
     except Exception:
         return False, "Unerwarteter Fehler beim Unbannen des Users."
-       
+
+def get_auto_action_preview(warn_count: int) -> str | None:
+    mod_cfg = config.moderation
+
+    timeout_at = mod_cfg.get("warn_timeout_threshold")
+    ban_at = mod_cfg.get("warn_ban_threshold")
+
+    # Schon Bann-Level erreicht
+    if ban_at is not None and warn_count >= ban_at:
+        return None
+
+    # Nächste Aktion: Bann
+    if timeout_at is not None and warn_count >= timeout_at:
+        remaining = ban_at - warn_count if ban_at else None
+        if remaining is not None:
+            return f"Bann (bei {remaining} weiterer Verwarnung{'en' if remaining != 1 else ''})"
+        return "Bann"
+
+    # Nächste Aktion: Timeout
+    if timeout_at is not None:
+        remaining = timeout_at - warn_count
+        return f"Timeout (bei {remaining} weiterer Verwarnung{'en' if remaining != 1 else ''})"
+
+    return None
