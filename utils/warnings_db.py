@@ -31,6 +31,16 @@ def init_db():
             conn.execute(
                 "ALTER TABLE warnings ADD COLUMN last_auto_action TEXT"
             )
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS punishments (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            active_timeout_until TEXT,
+            active_ban INTEGER DEFAULT 0,
+            reason TEXT,
+            PRIMARY KEY (guild_id, user_id)
+        )
+        """)
 def add_warning(guild_id: int, user_id: int, moderator_id: int, reason: str):
     with get_connection() as conn:
         conn.execute(
@@ -109,4 +119,76 @@ def set_last_auto_action(guild_id: int, user_id: int, action: str):
             WHERE guild_id = ? AND user_id = ?
             """,
             (action, guild_id, user_id)
+        )
+
+def get_punishment(guild_id: int, user_id: int):
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT active_timeout_until, active_ban
+            FROM punishments
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id)
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    timeout_until, active_ban = row
+    return {
+        "active_timeout_until": (
+            datetime.fromisoformat(timeout_until)
+            if timeout_until else None
+        ),
+        "active_ban": bool(active_ban),
+    }
+
+def save_timeout(guild_id: int, user_id: int, until: datetime):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO punishments (guild_id, user_id, active_timeout_until)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id, user_id)
+            DO UPDATE SET active_timeout_until = excluded.active_timeout_until
+            """,
+            (guild_id, user_id, until.isoformat())
+        )
+
+
+def clear_timeout(guild_id: int, user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE punishments
+            SET active_timeout_until = NULL
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id)
+        )
+
+def save_ban(guild_id: int, user_id: int, reason: str | None = None):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO punishments (guild_id, user_id, active_ban, reason)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT(guild_id, user_id)
+            DO UPDATE SET active_ban = 1, reason = excluded.reason
+            """,
+            (guild_id, user_id, reason)
+        )
+
+
+def clear_ban(guild_id: int, user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE punishments
+            SET active_ban = 0, reason = NULL
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id)
         )
