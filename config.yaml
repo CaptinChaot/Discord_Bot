@@ -1,5 +1,20 @@
 guild_id: 1460995865329270964
 
+role_management:
+  staff_roles:
+    - owner
+    - co_owner
+    - admin
+    - moderator
+    - dev 
+    
+  allowed_roles:
+    - supporter
+    - member_1
+    - member_2
+    - member_3
+    - member_4
+    
 roles:
   bot: 1461009559048032361
   owner: 1460995865731793089
@@ -44,21 +59,6 @@ permissions:
     min_level: MOD
   role_remove:
     min_level: MOD
-
-role_management:
-  staff_roles:
-    - owner
-    - co_owner
-    - admin
-    - moderator
-    - dev 
-    
-  allowed_roles:
-    - supporter
-    - member_1
-    - member_2
-    - member_3
-    - member_4
 
 security:
   lock_owner_actions: true
