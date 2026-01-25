@@ -57,7 +57,7 @@ class Moderation(commands.Cog):
             )
             return
         until = utcnow() + timedelta(seconds=duration)
-        save_timeout(interaction.guild_id, user.id, until)
+        save_timeout(interaction.guild_id, user.id, until, reason)
         # Loggen   
         channel_id = int(config.log_channels.get("moderation", 0)) # 0 = kein Logging - durch config.yaml wird geguckt obs nen log_channel gibt
         if channel_id:
@@ -105,7 +105,7 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-        clear_timeout(interaction.guild.id, user,id)
+        clear_timeout(interaction.guild.id, user.id)
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id:
