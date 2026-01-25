@@ -4,7 +4,7 @@ from utils.permissions import get_user_perm_level
 from utils.logger import logger
 from utils.config import config
 
-STAFF_ROLE_IDS = set[int] =set()
+STAFF_ROLE_IDS: set[int] =set()
 
 def can_moderate(
     *,
