@@ -528,6 +528,26 @@ class Moderation(commands.Cog):
         #DB status
         status = get_user_status(interaction.guild.id, user.id)
 
+        # --- Mismatch Detection ---
+        db_timeout_active = status["timeout_until"] is not None
+        discord_timeout_active = user.is_timed_out()
+
+        details = []
+        if db_timeout_active and not discord_timeout_active:
+            details.append("• Timeout in DB aktiv, aber nicht bei Discord")
+        if discord_timeout_active and not db_timeout_active:
+            details.append("• Timeout bei Discord aktiv, aber nicht in DB")
+        if status["active_ban"]:
+            details.append("• Bann in DB aktiv")
+
+        # --- Embed-Farbe abhängig vom Status ---
+        if status["active_ban"]:
+            embed_color = discord.Color.red()        # 🔴 kritisch
+        elif details:
+            embed_color = discord.Color.orange()     # 🟠 Warnung (Mismatch)
+        else:
+            embed_color = discord.Color.blue()       # 🔵 alles okay
+
         #basic info 
         account_created = discord.utils.format_dt(user.created_at, style="F")
         joined_at = discord.utils.format_dt(user.joined_at, style="F") if user.joined_at else "Unbekannt"
@@ -552,10 +572,10 @@ class Moderation(commands.Cog):
             discord.utils.format_dt(status["timeout_until"], style="F")
             if status["timeout_until"] else "-"
         )
-
+        title_prefix = "⚠️ " if details else ""
         embed = discord.Embed(  
-            title="fℹ️ Userinfo: {user}",
-            color=discord.Color.blue(),
+            title=f"{title_prefix}ℹ️ Userinfo: {user}",
+            color=embed_color,
             timestamp=utcnow()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -585,6 +605,14 @@ class Moderation(commands.Cog):
             ),
             inline=False
         )
+        # --- Mismatch Anzeige ---
+        if details:
+            embed.add_field(
+                name="⚠️ Status-Warnung",
+                value="\n".join(details),
+                inline=False
+            )
+
         # --- Timeout Details (optional, aber nice) ---
         if discord_timeout or status["timeout_until"]:
             embed.add_field(
