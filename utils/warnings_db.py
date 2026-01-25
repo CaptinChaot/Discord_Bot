@@ -145,19 +145,18 @@ def get_punishment(guild_id: int, user_id: int):
         "active_ban": bool(active_ban),
     }
 
-def save_timeout(guild_id: int, user_id: int, until: datetime):
+def save_timeout(guild_id: int, user_id: int, until: datetime, reason: str | None = None):
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO punishments (guild_id, user_id, active_timeout_until)
-            VALUES (?, ?, ?)
+            INSERT INTO punishments (guild_id, user_id, active_timeout_until, reason)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(guild_id, user_id)
-            DO UPDATE SET active_timeout_until = excluded.active_timeout_until
+            DO UPDATE SET active_timeout_until = excluded.active_timeout_until, reason = excluded.reason
             """,
-            (guild_id, user_id, until.isoformat())
-        )
-
-
+            (guild_id, user_id, until.isoformat(), reason)
+            )
+            
 def clear_timeout(guild_id: int, user_id: int):
     with get_connection() as conn:
         conn.execute(

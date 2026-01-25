@@ -12,8 +12,9 @@ from utils.moderation_utils import can_auto_action, handle_auto_actions
 from utils.decorators import require_perm
 from utils.warnings_db import (
     add_warning, count_warnings, delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id,get_last_auto_action, set_last_auto_action,)
+    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout)
 from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban)
+
 
 
 
@@ -55,7 +56,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-
+        until = utcnow() + timedelta(seconds=duration)
+        save_timeout(interaction.guild_id, user.id, until)
         # Loggen   
         channel_id = int(config.log_channels.get("moderation", 0)) # 0 = kein Logging - durch config.yaml wird geguckt obs nen log_channel gibt
         if channel_id:
@@ -439,7 +441,6 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-        from utils.warnings_db import save_ban
         save_ban(interaction.guild.id, user.id, reason)
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
