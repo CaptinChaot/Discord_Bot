@@ -3,17 +3,17 @@ import discord
 from datetime import timedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
+from utils.hardening import can_moderate
 from utils.config import config
 from utils.logger import logger, log_to_channel
 from discord.utils import utcnow
-from utils.checks import has_mod_permissions
+from utils.moderation_utils import can_auto_action, handle_auto_actions
+from utils.decorators import require_perm
 from utils.warnings_db import (
-    add_warning,
-    count_warnings,
-    delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id,
-    get_last_auto_action, set_last_auto_action,
-)
+    add_warning, count_warnings, delete_warnings as db_delete_warnings,
+    delete_warning_by_id, get_last_warning_id,get_last_auto_action, set_last_auto_action,)
+
+
 
 
 mod_cfg = config.moderation
@@ -29,24 +29,28 @@ class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     @app_commands.command(name="timeout", description="Setze einen User in Timeout")
+    @require_perm("timeout")
     async def timeout(self, interaction: Interaction, user: discord.Member, duration: int, reason: str = "Kein Grund angegeben"):
         await interaction.response.defer(ephemeral=True)
-        if not has_mod_permissions(interaction):
-            await interaction.followup.send(
-        "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
-        ephemeral=True
-    )
-            return
+
         if duration <= 0:
             await interaction.followup.send(
                 "❌ Dauer muss größer als 0 sein.",
             ephemeral=True
-    )
+            )
             return
-
+        
+        allowed, deny_reason = can_moderate(interaction=interaction, target=user, action="timeout")
+        if not allowed:
+            await interaction.followup.send(
+                f"❌ {deny_reason}",
+                ephemeral=True
+            )
+            return
 
         until = utcnow() + timedelta(seconds=duration)
         await user.timeout(until, reason=reason)
+
         channel_id = int(config.log_channels.get("moderation", 0)) # 0 = kein Logging - durch config.yaml wird geguckt obs nen log_channel gibt
         if channel_id != 0:
             await log_to_channel(
@@ -57,7 +61,7 @@ class Moderation(commands.Cog):
                 f"**User:** {user.mention} (ID: {user.id})\n"
                 f"**Dauer:** {duration} Sekunden\n"
                 f"**Grund:** {reason}\n",
-                discord.Color.red(),
+                discord.Color.gold(),
                 )
         logger.info(
     f"TIMEOUT | {interaction.user} -> {user} | {duration}s | {reason}"
@@ -69,16 +73,20 @@ class Moderation(commands.Cog):
         )
 
     @app_commands.command(name="untimeout", description="Entferne den Timeout von einem User")
+    @require_perm("untimeout")
     async def untimeout(self, interaction: Interaction, user: discord.Member):
         await interaction.response.defer(ephemeral=True)
-        if not has_mod_permissions(interaction):
+
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="untimeout")
+        if not allowed:
             await interaction.followup.send(
-        "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
-        ephemeral=True
-    )
+                f"❌ {reason}",
+                ephemeral=True
+            )
             return
 
         await user.timeout(None, reason="Timeout entfernt durch Moderation")
+
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id != 0:
                 await log_to_channel(
@@ -100,6 +108,7 @@ class Moderation(commands.Cog):
         user="User, der verwarnt werden soll",
         reason="Grund für die Verwarnung"
     )
+    @require_perm("warn")
     async def warn(
         self,
         interaction: discord.Interaction,
@@ -108,22 +117,13 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason_msg = can_moderate(interaction=interaction, target=user, action="warn")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason_msg}",
                 ephemeral=True
             )
             return
-
-        # Selbstschutz
-        if user == interaction.user:
-            await interaction.followup.send(
-                "❌ Du kannst dich nicht selbst verwarnen.",
-                ephemeral=True
-            )
-            return
-
         # DM an User (optional, aber Standard)
         try:
             await user.send(
@@ -147,180 +147,20 @@ class Moderation(commands.Cog):
             user_id=user.id
         )
 
-       # --- Automatische Maßnahmen ---
-        can_auto_action = True
-
-        # Bots nicht automatisch bestrafen
-        if user.bot:
-            can_auto_action = False
-        # Bot-Mitglied sauber holen (kein deprecated me)
-        bot_member = interaction.guild.me
-        if not bot_member:
-            logger.error("AUTO ACTION BLOCKED | Konnte Bot-Mitglied nicht holen")
-            can_auto_action = False
-
-        # Rolle des Users höher/gleich der Bot-Rolle?    
-        elif user.top_role >= bot_member.top_role:
-            logger.warning(
-                f"AUTO ACTION BLOCKED | Bot-Rolle zu niedrig "
-                f"(user={user.top_role.position}, bot={bot_member.top_role.position})"
+        # --- Automatische Maßnahmen ---
+        if can_auto_action(interaction, user):
+            action_taken = await handle_auto_actions(
+                bot=self.bot,
+                interaction=interaction,
+                user=user,
+                total_warnings=total_warnings,
+                timeout_warn=timeout_warn,
+                kick_warn=kick_warn,
+                ban_warn=ban_warn,
+                timeout_duration=timeout_duration
             )
-            can_auto_action = False
-        
-        logger.info(
-            f"AUTO CHECK | can_auto_action={can_auto_action} | "
-            f"user={user} | warns={total_warnings}"
-        )
-
-        if can_auto_action:
-            last_action = get_last_auto_action(
-                guild_id=interaction.guild.id,
-                user_id=user.id
-            )
-            if total_warnings >= ban_warn and last_action != "ban":
-                try:
-                    await user.send(
-                        f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
-                        f"**Grund:** Automatischer Bann durch Verwarnungen\n"
-                        f"**Moderator:** System"
-                    )
-                except discord.Forbidden:
-                    pass
-
-                try:
-                    await user.ban(
-                        reason="Automatischer Bann durch Verwarnungen",delete_message_days=0
-                    )
-                except discord.Forbidden:
-                    logger.error(
-                        f"AUTO BAN FAILED | Keine Rechte zum Bannen von {user} ({user.id})"
-                    )
-                    
-                    return
-                except discord.HTTPException:
-                    logger.error(
-                        f"AUTO BAN FAILED | HTTPException beim Bannen von {user} ({user.id})"
-                    )
-                    return
-                
-                channel_id = int(config.log_channels.get("moderation", 0))
-                if channel_id != 0:
-                    await log_to_channel(
-                        self.bot,
-                        channel_id,
-                        f"🔨 AUTO BANN",
-                        f"**User:** {user} (ID: {user.id})\n"
-                        f"**Auslöser:** Auto-System\n"
-                        f"**Grund:** Automatischer Bann durch Verwarnungen\n"
-                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
-                        discord.Color.dark_red(),
-                    )
-                logger.info(
-                    f"AUTO BANN | {user} | {total_warnings} Warns"
-                )
-                set_last_auto_action(
-                    guild_id=interaction.guild.id,
-                    user_id=user.id,
-                    action="ban"
-                )
-                return
-            
-            elif total_warnings >= kick_warn and last_action not in ("kick", "ban"):
-                try:
-                    await user.send(
-                        f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
-                        f"**Grund:** Automatischer Kick durch Verwarnungen\n"
-                        f"**Moderator:** System"
-                        )
-                except discord.Forbidden:
-                    pass
-                try:
-                    await user.kick(reason="Automatischer Kick durch Verwarnungen")
-
-                except discord.Forbidden:
-                    logger.error(
-                        f"AUTO KICK FAILED | Keine Rechte zum Kicken von {user} ({user.id})"
-                    )
-                    return
-                except discord.HTTPException:
-                    logger.error(
-                        f"AUTO KICK FAILED | HTTPException beim Kicken von {user} ({user.id})"
-                    )
-                    return
-
-                channel_id = int(config.log_channels.get("moderation", 0))
-                if channel_id != 0:
-                    await log_to_channel(
-                        self.bot,
-                        channel_id,
-                        f"👢 AUTO KICK",
-                        f"**User:** {user} (ID: {user.id})\n"
-                        f"**Auslöser:** Auto-System\n"
-                        f"**Grund:** Automatischer Kick durch Verwarnungen\n"
-                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
-                        discord.Color.dark_red(),
-                    )
-                logger.info(
-                    f"AUTO KICK | {user} | {total_warnings} Warns"
-                )
-                set_last_auto_action(
-                    guild_id=interaction.guild.id,
-                    user_id=user.id,
-                    action="kick"
-                )
-                return
-            
-            elif total_warnings >= timeout_warn and last_action is None:
-                try:
-                    await user.send(
-                        f"⏱️ **Du wurdest von {interaction.guild.name} in Timeout gesetzt**\n"
-                        f"**Grund:** Automatischer Timeout durch Verwarnungen\n"
-                        f"**Moderator:** System"
-                    )
-                except discord.Forbidden:
-                    pass
-                
-                try:
-                    until = utcnow() + timedelta(seconds=timeout_duration)#
-                    await user.timeout(
-                        until,
-                        reason="Automatischer Timeout durch Verwarnungen"
-                    )
-                except discord.Forbidden:
-                    logger.error(
-                        f"AUTO TIMEOUT FAILED | Keine Rechte zum Timeout von {user} ({user.id})"
-                    )
-                    return
-                except discord.HTTPException:
-                    logger.error(
-                        f"AUTO TIMEOUT FAILED | HTTPException beim Timeout von {user} ({user.id})"
-                    )
-                    
-                    return
-                
-                channel_id = int(config.log_channels.get("moderation", 0))
-                if channel_id != 0:
-                    await log_to_channel(
-                        self.bot,
-                        channel_id,
-                        f"⏱️ AUTO TIMEOUT",
-                        f"**User:** {user} (ID: {user.id})\n"
-                        f"**Auslöser:** Auto-System\n"
-                        f"**Grund:** Automatischer Timeout durch Verwarnungen\n"
-                        f"**Dauer:** {timeout_duration} Sekunden\n"
-                        f"**Anzahl der Verwarnungen:** {total_warnings}\n",
-                        discord.Color.orange(),
-                    )
-                logger.info(
-                    f"AUTO TIMEOUT | {user} | {total_warnings} Warns"
-                )
-                set_last_auto_action(
-                    guild_id=interaction.guild.id,
-                    user_id=user.id,
-                    action="timeout"
-                )
-                return
-            
+            if action_taken:
+                return  # Auto-Aktion 
         # Modlog Embed
         embed = discord.Embed(
             title="⚠️ Verwarnung",
@@ -333,17 +173,8 @@ class Moderation(commands.Cog):
         embed.add_field(name="Grund", value=reason, inline=False)
 
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
-            try:
-                modlog_channel = await self.bot.fetch_channel(channel_id)
-                await modlog_channel.send(embed=embed)
-            except discord.NotFound:
-                logger.error(f"MODLOG | Channel {channel_id} nicht gefunden")
-            except discord.Forbidden:
-                logger.error(f"MODLOG | Keine Rechte für Channel {channel_id}")
-            except Exception as e:
-                logger.exception(f"MODLOG | Unbekannter Fehler: {e}")
-
+        if channel_id:
+            await log_to_channel(self.bot,channel_id,"⚠️ User verwarnt",embed=embed)
         await interaction.followup.send(
         f"✅ {user.mention} wurde verwarnt.",
         ephemeral=True
@@ -353,21 +184,14 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         user="User, dessen Verwarnungen angezeigt werden sollen"
     )  
-
+    @require_perm("warnings")
     async def warnings(
         self,
         interaction: discord.Interaction,
         user: discord.Member
     ):
         await interaction.response.defer(ephemeral=True)
-
-        # Permission Check
-        if not has_mod_permissions(interaction):
-            await interaction.followup.send(
-                "❌ Keine Berechtigung.",
-                ephemeral=True
-            )
-            return
+    
         if user.bot:
             await interaction.followup.send(
                 "❌ Bots können keine Verwarnungen haben.",
@@ -390,6 +214,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         user="User, dessen Verwarnungen gelöscht werden sollen"
     )
+    @require_perm("del_warnings")
     async def delete_warnings(
         self,
         interaction: discord.Interaction,
@@ -397,13 +222,14 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="del_warnings")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
+        
         if user.bot:
             await interaction.followup.send(
                 "❌ Bots können keine Verwarnungen haben.",
@@ -452,6 +278,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         user="User, dessen letzte Verwarnung gelöscht werden soll"
     )
+    @require_perm("warn")
     async def unwarn(
         self,
         interaction: discord.Interaction,
@@ -459,20 +286,14 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="unwarn")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
-        if user.bot:
-            await interaction.followup.send(
-                "❌ Bots können keine Verwarnungen haben.",
-                ephemeral=True
-            )
-            return        
-        
+
         # Letzte Verwarnung ID holen
         warn_id = get_last_warning_id(
             guild_id=interaction.guild.id,
@@ -512,6 +333,7 @@ class Moderation(commands.Cog):
         user="User, der gekickt werden soll",
         reason="Grund für den Kick"
     )
+    @require_perm("kick")
     async def kick(
         self,
         interaction: discord.Interaction,
@@ -520,39 +342,14 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="kick")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
 
-        # Selbstschutz
-        if user == interaction.user:
-            await interaction.followup.send(
-                "❌ Du kannst dich nicht selbst kicken.",
-                ephemeral=True
-            )
-            return
-        if user.top_role >= interaction.user.top_role:
-            await interaction.followup.send(
-                "❌ Du kannst keinen User mit einer gleichen oder höheren Rolle kicken.",
-                ephemeral=True
-            )
-            return
-        if user.top_role >= interaction.guild.me.top_role:
-            await interaction.followup.send(
-                "❌ Ich kann keinen User mit einer gleichen oder höheren Rolle kicken.",
-                ephemeral=True
-            )
-            return
-        if user.bot:
-            await interaction.followup.send(
-                "❌ Bots können nicht gekickt werden.",
-                ephemeral=True
-            )
-            return  
         try:
             await user.send(
                 f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
@@ -574,7 +371,7 @@ class Moderation(commands.Cog):
                 f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
                 f"**User:** {user.mention} (ID: {user.id})\n"
                 f"**Grund:** {reason}\n",
-                discord.Color.red(),
+                discord.Color.orange(),
             )
         logger.info(f"KICK | {interaction.user} -> {user} | {reason}")
 
@@ -588,6 +385,7 @@ class Moderation(commands.Cog):
         user="User, der gebannt werden soll",
         reason="Grund für den Ban"
     )
+    @require_perm("ban")
     async def ban(
         self,
         interaction: discord.Interaction,
@@ -596,39 +394,14 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="ban")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
 
-        # Selbstschutz
-        if user == interaction.user:
-            await interaction.followup.send(
-                "❌ Du kannst dich nicht selbst bannen.",
-                ephemeral=True
-            )
-            return
-        if user.top_role >= interaction.user.top_role:
-            await interaction.followup.send(
-                "❌ Du kannst keinen User mit einer gleichen oder höheren Rolle bannen.",
-                ephemeral=True
-            )
-            return
-        if user.top_role >= interaction.guild.me.top_role:
-            await interaction.followup.send(
-                "❌ Ich kann keinen User mit einer gleichen oder höheren Rolle bannen.",
-                ephemeral=True
-            )
-            return
-        if user.id == interaction.guild.owner_id:
-            await interaction.followup.send(
-                "❌ Du kannst den Serverbesitzer nicht bannen.",
-                ephemeral=True
-            )
-            return
         try:
             await user.send(
                 f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
@@ -676,6 +449,7 @@ class Moderation(commands.Cog):
         user_id="ID des Users, der entbannt werden soll",
         reason="Grund für den Unban"
     )
+    @require_perm("ban")
     async def unban(
         self,
         interaction: discord.Interaction,
@@ -684,10 +458,10 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
+        allowed, reason = can_moderate(interaction=interaction, target_id=user_id, action="unban")
+        if not allowed:
             await interaction.followup.send(
-                "❌ Keine Berechtigung.",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
@@ -748,6 +522,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         user="User, über den Informationen angezeigt werden sollen"
     )
+    @require_perm("userinfo")
     async def userinfo(
         self,
         interaction: discord.Interaction,
@@ -755,13 +530,6 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        #permission Check
-        if not has_mod_permissions(interaction):
-            await interaction.followup.send(
-                "❌ Keine Berechtigung.",
-                ephemeral=True
-            )
-            return
         #basic info embed
         account_created = discord.utils.format_dt(user.created_at, style="F")
         joined_at = discord.utils.format_dt(user.joined_at, style="F") if user.joined_at else "Unbekannt"
@@ -811,6 +579,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         amount="Anzahl der zu löschenden Nachrichten (1 - 100)"
     )
+    @require_perm("clear")
     async def clear(
         self,
         interaction: discord.Interaction,
@@ -818,13 +587,6 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # Permission Check
-        if not has_mod_permissions(interaction):
-            await interaction.followup.send(
-                "❌ Keine Berechtigung.",
-                ephemeral=True
-            )
-            return
         if amount < 1 or amount > 100:
             await interaction.followup.send(
                 "❌ Die Anzahl muss zwischen 1 und 100 liegen.",
@@ -833,7 +595,7 @@ class Moderation(commands.Cog):
             return
         channel = interaction.channel
         # Sicherstellen, dass der Kanal Textkanal ist
-        if not isinstance(channel, discord.TextChannel):
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
             await interaction.followup.send(
                 "❌ Dieser Befehl kann nur in Textkanälen verwendet werden.",
                 ephemeral=True

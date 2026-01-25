@@ -1,8 +1,10 @@
-from utils.logger import logger, log_to_channel
-
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+from utils.decorators import require_perm
+from utils.hardening import can_moderate
+from utils.logger import logger, log_to_channel
 from utils.config import config
 
 
@@ -10,109 +12,153 @@ class Roles(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    def _has_permission(self, member: discord.Member) -> bool:
-        admin_id = int(config.roles.get("admin", 0))
-        mod_id = int(config.roles.get("moderator", 0))
-
-        return any(
-            role.id in (admin_id, mod_id)
-            for role in member.roles
-        )
-
+    # -----------------------------
+    # ROLE ADD
+    # -----------------------------
     @app_commands.command(name="role_add", description="Rolle zuweisen")
+    @require_perm("role_add")
     async def role_add(
         self,
         interaction: discord.Interaction,
         user: discord.Member,
         role: discord.Role,
     ):
-        if not self._has_permission(interaction.user):
-            await interaction.response.send_message(
-                "❌ Keine Berechtigung.",
-                ephemeral=True,
+        await interaction.response.defer(ephemeral=True)
+
+        allowed, reason = can_moderate(
+            interaction=interaction,
+            target=user,
+            action="role_add"
+        )
+        if not allowed:
+            await interaction.followup.send(f"❌ {reason}", ephemeral=True)
+            return
+
+        # Selbstschutz
+        if user == interaction.user:
+            await interaction.followup.send(
+                "❌ Du kannst dir selbst keine Rollen geben.",
+                ephemeral=True
             )
             return
+
+        # Rollen-Hierarchie (Bot)
+        bot_member = interaction.guild.me
+        if role >= bot_member.top_role:
+            await interaction.followup.send(
+                "❌ Ich kann diese Rolle nicht verwalten (Bot-Rolle zu niedrig).",
+                ephemeral=True
+            )
+            return
+
+        # Rollen-Whitelist (optional)
+        allowed_roles = config.get("role_management", {}).get("allowed_roles")
+        if allowed_roles:
+            if role.name not in allowed_roles:
+                await interaction.followup.send(
+                    "❌ Diese Rolle darf nicht manuell vergeben werden.",
+                    ephemeral=True
+                )
+                return
 
         if role in user.roles:
-            await interaction.response.send_message(
-                "⚠️ User hat die Rolle bereits.",
-                ephemeral=True,
+            await interaction.followup.send(
+                "⚠️ User hat diese Rolle bereits.",
+                ephemeral=True
             )
             return
 
-        # 🔴 HIER passiert die Aktion
+        # Aktion
         await user.add_roles(
             role,
-            reason=f"Role add by {interaction.user}",
+            reason=f"Role add by {interaction.user}"
         )
 
-        # 🟢 HIER kommt das Logging (GENAU HIER)
+        # Logging
         logger.info(
             f"ROLE ADD | {interaction.user} -> {user} | {role.id}:{role.name}"
         )
 
-        await log_to_channel(
-            self.bot,
-            int(config.log_channels.get("bot", 0)),
-            "🟢 Rolle hinzugefügt",
-            f"**Moderator:** {interaction.user.mention}\n"
-            f"**User:** {user.mention}\n"
-            f"**Rolle:** {role.mention}",
-            discord.Color.green(),
+        channel_id = int(config.log_channels.get("bot", 0))
+        if channel_id:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                "🟢 Rolle hinzugefügt",
+                f"**Moderator:** {interaction.user.mention}\n"
+                f"**User:** {user.mention}\n"
+                f"**Rolle:** {role.mention}",
+                discord.Color.green(),
+            )
+
+        await interaction.followup.send(
+            f"✅ {role.mention} wurde {user.mention} hinzugefügt.",
+            ephemeral=True
         )
 
-        # 🔵 Zum Schluss Antwort an den Command-User
-        await interaction.response.send_message(
-            f"✅ {role.mention} zu {user.mention} hinzugefügt.",
-            ephemeral=True,
-        )
-
+    # -----------------------------
+    # ROLE REMOVE
+    # -----------------------------
     @app_commands.command(name="role_remove", description="Rolle entfernen")
+    @require_perm("role_remove")
     async def role_remove(
         self,
         interaction: discord.Interaction,
         user: discord.Member,
         role: discord.Role,
     ):
-        if not self._has_permission(interaction.user):
-            await interaction.response.send_message(
-                "❌ Keine Berechtigung.",
-                ephemeral=True,
-            )
+        await interaction.response.defer(ephemeral=True)
+
+        allowed, reason = can_moderate(
+            interaction=interaction,
+            target=user,
+            action="role_remove"
+        )
+        if not allowed:
+            await interaction.followup.send(f"❌ {reason}", ephemeral=True)
             return
 
         if role not in user.roles:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ User hat diese Rolle nicht.",
-                ephemeral=True,
+                ephemeral=True
             )
             return
 
-        # 🔴 Aktion
+        bot_member = interaction.guild.me
+        if role >= bot_member.top_role:
+            await interaction.followup.send(
+                "❌ Ich kann diese Rolle nicht verwalten (Bot-Rolle zu niedrig).",
+                ephemeral=True
+            )
+            return
+
+        # Aktion
         await user.remove_roles(
             role,
-            reason=f"Role remove by {interaction.user}",
+            reason=f"Role remove by {interaction.user}"
         )
 
-        # 🟢 Logging DIREKT DANACH
+        # Logging
         logger.info(
             f"ROLE REMOVE | {interaction.user} -> {user} | {role.id}:{role.name}"
         )
 
-        await log_to_channel(
-            self.bot,
-            int(config.log_channels.get("bot", 0)),
-            "🔴 Rolle entfernt",
-            f"**Moderator:** {interaction.user.mention}\n"
-            f"**User:** {user.mention}\n"
-            f"**Rolle:** {role.mention}",
-            discord.Color.red(),
-        )
+        channel_id = int(config.log_channels.get("bot", 0))
+        if channel_id:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                "🔴 Rolle entfernt",
+                f"**Moderator:** {interaction.user.mention}\n"
+                f"**User:** {user.mention}\n"
+                f"**Rolle:** {role.mention}",
+                discord.Color.red(),
+            )
 
-        # 🔵 Antwort
-        await interaction.response.send_message(
-            f"✅ {role.mention} von {user.mention} entfernt.",
-            ephemeral=True,
+        await interaction.followup.send(
+            f"✅ {role.mention} wurde von {user.mention} entfernt.",
+            ephemeral=True
         )
 
 

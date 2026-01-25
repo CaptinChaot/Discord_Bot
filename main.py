@@ -8,6 +8,7 @@ from api.app import create_api
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.logger import logger, log_to_channel
+from utils.hardening import STAFF_ROLE_IDS
 from utils.config import config
 from discord import app_commands
 from utils.warnings_db import init_db
@@ -50,7 +51,16 @@ def start_api(bot):
             
 @bot.event
 async def on_ready():
-    print(f"✅ Eingeloggt als {bot.user} (ID: {bot.user.id})")
+
+    STAFF_ROLE_IDS.clear()
+
+    staff_role_keys = config.role_management.get("staff_roles", [])
+    for key in staff_role_keys:
+        role_id = config.roles.get(key)
+        if role_id:
+            STAFF_ROLE_IDS.add(int(role_id))
+
+    logger.info(f"✅ Eingeloggt als {bot.user} (ID: {bot.user.id})")
 
     #FastAPI parallel starten
     if not hasattr(bot, "_api_started"):
@@ -62,7 +72,7 @@ async def on_ready():
             daemon=True
         )
         thread.start()
-        print("🌐 API-Server gestartet.")
+        logger.info("🌐 API-Server gestartet.")
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN fehlt in .env")
