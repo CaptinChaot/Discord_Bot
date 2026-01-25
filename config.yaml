@@ -32,11 +32,12 @@ log_channels:
   bot: 1460995867334017169
   moderation: 1461013968335409388
 
+#Permlevel: MEMBER =0 / SUPPORT =5 / MOD =10 /ADMIN =20 / DEV =30 / CO_OWNER = 35 / OWNER = 40
 permissions:
   warn:
     min_level: 10
   warnings:
-    min_level: 5
+    min_level: 5 
   del_warnings:
     min_level: 20
   timeout:
