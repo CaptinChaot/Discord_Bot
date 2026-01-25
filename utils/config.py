@@ -26,6 +26,19 @@ class Config:
     @property
     def moderation(self) -> dict:
         return self._data.get("moderation", {})
-
+    
+    @property
+    def role_management(self) -> dict:
+        return self._data.get("role_management", {})
+    
+    @property
+    def permissions(self) -> dict:
+        return self._data.get("permissions", {})
+    
+    @property
+    def security(self) -> dict:
+        sec =self._data.get("security", {})
+        return sec if isinstance(sec, dict) else {}
+    
 # Singleton
 config = Config()

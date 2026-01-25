@@ -14,7 +14,7 @@ role_management:
     - member_2
     - member_3
     - member_4
-    
+
 roles:
   bot: 1461009559048032361
   owner: 1460995865731793089
@@ -62,6 +62,8 @@ permissions:
 
 security:
   lock_owner_actions: true
+  admin_is_owner: false
+  owner_role_only: true
 
 moderation:
   warn_kick_threshold: 3

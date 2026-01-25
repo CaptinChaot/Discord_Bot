@@ -2,7 +2,6 @@ import discord
 from enum import IntEnum
 from utils.config import config
 
-
 class PermLevel(IntEnum):
     MEMBER = 0
     SUPPORT = 5
@@ -27,7 +26,7 @@ ROLE_TO_LEVEL = {
     config.roles.get("admin"): PermLevel.ADMIN,
     config.roles.get("dev"): PermLevel.DEV,
     config.roles.get("owner"): PermLevel.OWNER,
-    config.roles.get("co_owner"): PermLevel.OWNER,
+    config.roles.get("co_owner"): PermLevel.CO_OWNER,
 } .items()
     if role_id is not None
 }
@@ -35,9 +34,13 @@ ROLE_TO_LEVEL = {
 
 def get_user_perm_level(member: discord.Member) -> PermLevel:
     # Safety-Fallback: Discord-Admin = Owner-Level
-    if member.guild_permissions.administrator:
-        return PermLevel.OWNER # Admin-Notfall-Fallback
-
+    security_cfg = config.security 
+    if (member.guild_permissions.administrator and
+        security_cfg.get("admin_is_owner", False)
+        and not security_cfg.get("owner_role_only", False)
+        ):    
+        return PermLevel.OWNER
+    
     highest = PermLevel.MEMBER
 
     for role in member.roles:
@@ -47,3 +50,12 @@ def get_user_perm_level(member: discord.Member) -> PermLevel:
 
     return highest
 
+def get_required_perm_level(action: str) -> PermLevel:
+    perm_cfg = config.permissions.get(action)
+    if not perm_cfg:
+        return PermLevel.DEV 
+
+    return PermLevel(perm_cfg.get("min_level", PermLevel.DEV))
+
+def has_permission(member: discord.Member, action: str) -> bool:
+    return get_user_perm_level(member) >= get_required_perm_level(action)
