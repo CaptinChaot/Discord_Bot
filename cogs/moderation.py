@@ -72,7 +72,7 @@ class Moderation(commands.Cog):
                 discord.Color.gold(),
                 )
         logger.info(
-    f"TIMEOUT | {interaction.user} -> {user} | {duration}s | {reason}"
+        f"TIMEOUT | {interaction.user} -> {user} | {duration}s | {reason}"
         )
 
         await interaction.followup.send(
@@ -119,7 +119,7 @@ class Moderation(commands.Cog):
                 )
         logger.info(f"UNTIMEOUT | {interaction.user} -> {user}")
         await interaction.followup.send(
-            f"✅ Timeout von {user.mention} wurde entfernt.\n",
+            f"✅ Timeout von {user.mention} wurde entfernt.\n"
             f"**Grund:** {reason}",
             ephemeral=True
         )
