@@ -34,35 +34,35 @@ log_channels:
 
 permissions:
   warn:
-    min_level: MOD
+    min_level: 10
   warnings:
-    min_level: SUPPORT
+    min_level: 5
   del_warnings:
-    min_level: ADMIN
+    min_level: 20
   timeout:
-    min_level: MOD
+    min_level: 10
   untimeout:
-    min_level: MOD
+    min_level: 10
   clear:
-    min_level: MOD
+    min_level: 10
   kick:
-    min_level: ADMIN
+    min_level: 20
   ban:
-    min_level: ADMIN
+    min_level: 20
   unban:
-    min_level: ADMIN
+    min_level: 20
   userinfo:
-    min_level: SUPPORT
+    min_level: 5
   devpanel:
-    min_level: DEV
+    min_level: 30
   reload:
-    min_level: DEV
+    min_level: 30
   role_add:
-    min_level: MOD
+    min_level: 10
   role_remove:
-    min_level: MOD
+    min_level: 10
   clear:
-    min_level: MOD  
+    min_level: 10  
 
 security:
   lock_owner_actions: true
