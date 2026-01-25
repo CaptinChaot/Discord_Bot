@@ -555,7 +555,7 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(  
             title="fℹ️ Userinfo: {user}",
-            color=discord.Color.blue,
+            color=discord.Colour.blue,
             timestamp=utcnow()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
