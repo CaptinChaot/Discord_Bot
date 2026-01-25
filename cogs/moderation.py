@@ -3,6 +3,7 @@ import discord
 from datetime import timedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
+from utils.hardlock import hardlock_check, hardlock_log_line
 from utils.hardening import can_moderate
 from utils.config import config
 from utils.logger import logger, log_to_channel
@@ -12,6 +13,7 @@ from utils.decorators import require_perm
 from utils.warnings_db import (
     add_warning, count_warnings, delete_warnings as db_delete_warnings,
     delete_warning_by_id, get_last_warning_id,get_last_auto_action, set_last_auto_action,)
+from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban)
 
 
 
@@ -33,31 +35,35 @@ class Moderation(commands.Cog):
     async def timeout(self, interaction: Interaction, user: discord.Member, duration: int, reason: str = "Kein Grund angegeben"):
         await interaction.response.defer(ephemeral=True)
 
-        if duration <= 0:
+        # Hardlock Check
+        allowed, block_reason = hardlock_check(interaction, user)
+        if not allowed:
+            logger.warning(hardlock_log_line(interaction, user, block_reason))
             await interaction.followup.send(
-                "❌ Dauer muss größer als 0 sein.",
-            ephemeral=True
+                f"❌ {block_reason}",
+                ephemeral=True
             )
             return
         
-        allowed, deny_reason = can_moderate(interaction=interaction, target=user, action="timeout")
-        if not allowed:
+        #--- Action Helpers ---
+        ok, error = await safe_timeout(
+            user, duration, reason=reason
+        )
+        if not ok:
             await interaction.followup.send(
-                f"❌ {deny_reason}",
+                f"❌ {error}",
                 ephemeral=True
             )
             return
 
-        until = utcnow() + timedelta(seconds=duration)
-        await user.timeout(until, reason=reason)
-
+        # Loggen   
         channel_id = int(config.log_channels.get("moderation", 0)) # 0 = kein Logging - durch config.yaml wird geguckt obs nen log_channel gibt
-        if channel_id != 0:
+        if channel_id:
             await log_to_channel(
-                 self.bot,
+                self.bot,
                 channel_id,
                 f"⏱️ Timeout gesetzt",
-                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})"
+                f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
                 f"**User:** {user.mention} (ID: {user.id})\n"
                 f"**Dauer:** {duration} Sekunden\n"
                 f"**Grund:** {reason}\n",
@@ -73,33 +79,45 @@ class Moderation(commands.Cog):
         )
 
     @app_commands.command(name="untimeout", description="Entferne den Timeout von einem User")
+    @app_commands.describe(
+        user="User, dessen Timeout entfernt werden soll",
+        reason="Grund für das Entfernen des Timeouts")
     @require_perm("untimeout")
-    async def untimeout(self, interaction: Interaction, user: discord.Member):
+    async def untimeout(self, interaction: Interaction, user: discord.Member, reason: str = "Timeout entfernt durch Moderator"):
         await interaction.response.defer(ephemeral=True)
 
-        allowed, reason = can_moderate(interaction=interaction, target=user, action="untimeout")
+        # Hardlock Check
+        allowed, block_reason = hardlock_check(interaction, user)
         if not allowed:
+            logger.warning(hardlock_log_line(interaction, user, block_reason))
             await interaction.followup.send(
-                f"❌ {reason}",
+                f"❌ {block_reason}",
                 ephemeral=True
             )
             return
-
-        await user.timeout(None, reason="Timeout entfernt durch Moderation")
-
+        #--- Action Helpers ---
+        ok, error = await safe_untimeout(user, reason=reason)
+        if not ok:
+            await interaction.followup.send(
+                f"❌ {error}",
+                ephemeral=True
+            )
+            return
+        # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
                 await log_to_channel(
                     self.bot,
                     channel_id,
                     f"⏱️ Timeout entfernt",
-                    f"**Moderator:** {interaction.user} (ID: {interaction.user.id})"
+                    f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
                     f"**User:** {user.mention} (ID: {user.id})\n",
                     discord.Color.green(),
                 )
         logger.info(f"UNTIMEOUT | {interaction.user} -> {user}")
         await interaction.followup.send(
-            f"✅ Timeout von {user.mention} wurde entfernt.",
+            f"✅ Timeout von {user.mention} wurde entfernt.\n",
+            f"**Grund:** {reason}",
             ephemeral=True
         )
 
@@ -117,10 +135,10 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        allowed, reason_msg = can_moderate(interaction=interaction, target=user, action="warn")
+        allowed, reason = can_moderate(interaction=interaction, target=user, action="warn")
         if not allowed:
             await interaction.followup.send(
-                f"❌ {reason_msg}",
+                f"❌ {reason}",
                 ephemeral=True
             )
             return
@@ -265,7 +283,7 @@ class Moderation(commands.Cog):
         embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)
 
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             modlog_channel = self.bot.get_channel(channel_id)
             if modlog_channel:
                 await modlog_channel.send(embed=embed)
@@ -318,7 +336,7 @@ class Moderation(commands.Cog):
         embed.add_field(name="Moderator", value=f"{interaction.user}", inline=False)    
 
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             modlog_channel = self.bot.get_channel(channel_id)
             if modlog_channel:
                 await modlog_channel.send(embed=embed)
@@ -342,28 +360,28 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        allowed, reason = can_moderate(interaction=interaction, target=user, action="kick")
+         # Hardlock Check
+        allowed, block_reason = hardlock_check(interaction, user)
         if not allowed:
+            logger.warning(hardlock_log_line(interaction, user, block_reason))
             await interaction.followup.send(
-                f"❌ {reason}",
+                f"❌ {block_reason}",
                 ephemeral=True
             )
             return
-
-        try:
-            await user.send(
-                f"👢 **Du wurdest von {interaction.guild.name} gekickt**\n"
-                f"**Grund:** {reason}\n"
-                f"**Moderator:** {interaction.user}"
+        #--- Action Helpers ---
+        ok, error = await safe_kick(
+            user, reason=reason
+        )
+        if not ok:
+            await interaction.followup.send(
+                f"❌ {error}",
+                ephemeral=True
             )
-        except discord.Forbidden:
-            pass  # DMs aus → egal, Kick zählt
-        # Kick ausführen
-        await user.kick(reason=reason)
-
+            return
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             await log_to_channel(
                 self.bot,
                 channel_id,
@@ -383,52 +401,48 @@ class Moderation(commands.Cog):
     @app_commands.command(name="ban", description="Bannt einen User vom Server")
     @app_commands.describe(
         user="User, der gebannt werden soll",
-        reason="Grund für den Ban"
+        reason="Grund für den Bann",
+        delete_days="Anzahl der Tage, für die Nachrichten gelöscht werden sollen (0-7)"
     )
     @require_perm("ban")
     async def ban(
         self,
         interaction: discord.Interaction,
         user: discord.Member,
-        reason: str = "Kein Grund angegeben"
+        reason: str = "Kein Grund angegeben",
+        delete_days: int = 0
     ):
         await interaction.response.defer(ephemeral=True)
 
-        allowed, reason = can_moderate(interaction=interaction, target=user, action="ban")
+        # Hardlock Check
+        allowed, block_reason = hardlock_check(interaction, user)
         if not allowed:
+            logger.warning(hardlock_log_line(interaction, user, block_reason))
             await interaction.followup.send(
-                f"❌ {reason}",
+                f"❌ {block_reason}",
                 ephemeral=True
             )
             return
+        # Cleanup Messages
+        delete_days = max(0, min(delete_days, 7))
 
-        try:
-            await user.send(
-                f"🔨 **Du wurdest von {interaction.guild.name} gebannt**\n"
-                f"**Grund:** {reason}\n"
-                f"**Moderator:** {interaction.user}"
-            )
-        except discord.Forbidden:
-            pass  # DMs aus → egal, Ban zählt
-        # Ban ausführen
-        try:
-            await user.ban(reason=reason, delete_message_days=0)
-        except discord.Forbidden:
+        #--- Action Helpers ---
+        ok, error = await safe_ban(
+            interaction.guild,
+            user,
+            reason=reason,
+            delete_message_seconds=delete_days * 86400
+        )
+        if not ok:
             await interaction.followup.send(
-                "❌ Ich habe keine Berechtigung, diesen User zu bannen.",
-                ephemeral=True
-            )
-            return    
-        except discord.HTTPException:
-            await interaction.followup.send(
-                "❌ Beim Bannen des Users ist ein Fehler aufgetreten.",
+                f"❌ {error}",
                 ephemeral=True
             )
             return
 
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             await log_to_channel(
                 self.bot,
                 channel_id,
@@ -444,78 +458,55 @@ class Moderation(commands.Cog):
             f"✅ {user.mention} wurde gebannt. Grund: {reason}",
             ephemeral=True
         )
-    @app_commands.command(name="unban", description="Entbannt einen User vom Server")
+    @app_commands.command(name="unban", description="Entbannt einen User")
     @app_commands.describe(
         user_id="ID des Users, der entbannt werden soll",
         reason="Grund für den Unban"
     )
-    @require_perm("ban")
+    @require_perm("unban")
     async def unban(
         self,
         interaction: discord.Interaction,
-        user_id: int,
+        user_id: str,
         reason: str = "Kein Grund angegeben"
     ):
         await interaction.response.defer(ephemeral=True)
 
-        allowed, reason = can_moderate(interaction=interaction, target_id=user_id, action="unban")
-        if not allowed:
-            await interaction.followup.send(
-                f"❌ {reason}",
-                ephemeral=True
-            )
-            return
-        # User holen
         try:
-            user = await self.bot.fetch_user(user_id)
-        except discord.NotFound:
+            uid = int(user_id)
+        except ValueError:
             await interaction.followup.send(
-                "❌ User nicht gefunden.",
+                "❌ Ungültige User-ID.",
                 ephemeral=True
             )
             return
-        # prüfen ob user gebannt ist
-        try:
-            ban_entry = await interaction.guild.fetch_ban(user)
-        except discord.NotFound:
+        user = discord.Object(id=uid)
+        #--- Action Helpers ---
+        ok, error = await safe_unban(
+            interaction.guild, user, reason=reason
+        )
+        if not ok:
             await interaction.followup.send(
-                "❌ Der User ist nicht gebannt.",
-                ephemeral=True
-            )
-            return
-
-        # Unban ausführen
-        try:
-            await interaction.guild.unban(user, reason=reason)
-        except discord.Forbidden:
-            await interaction.followup.send(
-                "❌ Ich habe keine Berechtigung, diesen User zu entbannen.",
-                ephemeral=True
-            )
-            return
-        except discord.HTTPException:
-            await interaction.followup.send(
-                "❌ Beim Entbannen des Users ist ein Fehler aufgetreten.",
+                f"❌ {error}",
                 ephemeral=True
             )
             return
 
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             await log_to_channel(
                 self.bot,
                 channel_id,
                 f"🔨 User entbannt",
                 f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
-                f"**User:** {user} (ID: {user.id})\n"
+                f"**User-ID:** {uid}\n"
                 f"**Grund:** {reason}\n",
                 discord.Color.green(),
             )
-        logger.info(f"UNBAN | {interaction.user} -> {user} | {reason}")
-
+        logger.info(f"UNBAN | {interaction.user} -> {uid} | {reason}")
         await interaction.followup.send(
-            f"✅ {user.mention} wurde entbannt. Grund: {reason}",
+            f"✅ User mit ID `{uid}` wurde entbannt. Grund: {reason}",
             ephemeral=True
         )
     @app_commands.command(name="userinfo", description="Zeigt Informationen an")
@@ -601,6 +592,23 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
+        
+        #Bot-Objekt sauber ermitteln
+        bot_me = interaction.guild.me or interaction.guild.get_member(self.bot.user.id)
+        if not bot_me:
+            await interaction.followup.send(
+                "❌ Bot-Status im Server konnte nicht ermittelt werden.",
+                ephemeral=True
+                )
+            return
+        # BOT-Rechte prüfen
+        if not channel.permissions_for(bot_me).manage_messages:
+            await interaction.followup.send(
+                "❌ Mir fehlen die Rechte, Nachrichten zu löschen.",
+                ephemeral=True
+            )
+            return
+
          # Nachrichten löschen  
         try:
             deleted = await channel.purge(limit=amount + 1) # +1 um die Befehlsnachricht einzuschließen
@@ -616,6 +624,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
+        deleted_count = max(len(deleted) - 1, 0)
+
         #Modlog
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id != 0:
@@ -625,12 +635,12 @@ class Moderation(commands.Cog):
                 f"🧹 Nachrichten gelöscht",
                 f"**Moderator:** {interaction.user} (ID: {interaction.user.id})\n"
                 f"**Kanal:** {channel.mention} (ID: {channel.id})\n"
-                f"**Anzahl der gelöschten Nachrichten:** {len(deleted)-1}\n",
+                f"**Anzahl:** {deleted_count}\n",
                 discord.Color.orange(),
             )
-            logger.info(f"CLEAR | {interaction.user} | Kanal: {channel} | {len(deleted)-1} Nachrichten gelöscht")
+            logger.info(f"CLEAR | {interaction.user} | Channel #{channel.name} ({channel.id}) | {deleted_count} msgs")
         await interaction.followup.send(
-            f"✅ {len(deleted)-1} Nachrichten wurden gelöscht.",
+            f"✅ {deleted_count} Nachrichten wurden gelöscht.",
             ephemeral=True
         )
 async def setup(bot: commands.Bot):    

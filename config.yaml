@@ -49,6 +49,8 @@ permissions:
     min_level: ADMIN
   ban:
     min_level: ADMIN
+  unban:
+    min_level: ADMIN
   userinfo:
     min_level: SUPPORT
   devpanel:
@@ -59,6 +61,8 @@ permissions:
     min_level: MOD
   role_remove:
     min_level: MOD
+  clear:
+    min_level: MOD  
 
 security:
   lock_owner_actions: true
