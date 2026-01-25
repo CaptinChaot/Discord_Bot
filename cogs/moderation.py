@@ -3,11 +3,12 @@ import discord
 from datetime import timedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
-from utils.hardlock import hardlock_check, hardlock_log_line
+from discord.utils import utcnow
 from utils.hardening import can_moderate
 from utils.config import config
+from utils.hardlock import hardlock_check, hardlock_log_line
 from utils.logger import logger, log_to_channel
-from discord.utils import utcnow
+from utils.sync import sync_user_state
 from utils.moderation_utils import can_auto_action, handle_auto_actions
 from utils.decorators import require_perm
 from utils.warnings_db import (
@@ -558,7 +559,7 @@ class Moderation(commands.Cog):
             user_id=user.id
         )
         auto_action_preview = get_auto_action_preview(total_warnings)
-        
+
         last_action = get_last_auto_action(
             guild_id=interaction.guild.id,
             user_id=user.id
@@ -699,7 +700,7 @@ class Moderation(commands.Cog):
 
         #Modlog
         channel_id = int(config.log_channels.get("moderation", 0))
-        if channel_id != 0:
+        if channel_id:
             await log_to_channel(
                 self.bot,
                 channel_id,
@@ -714,10 +715,44 @@ class Moderation(commands.Cog):
             f"✅ {deleted_count} Nachrichten wurden gelöscht.",
             ephemeral=True
         )
+    @app_commands.command(name="sync_user", description="Synchronisiert den DB-Status mit Discord")
+    @app_commands.describe(user="User, der synchronisiert werden soll")
+    @require_perm("sync_user")
+    async def sync_user(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        actions = await sync_user_state(
+            interaction.guild, user
+        )
+        if not actions:
+            await interaction.followup.send(
+            f"✅ {user.mention} ist bereits synchron.",
+            ephemeral=True
+            )
+            return
+        
+        #Modlog
+        channel_id = int(config.log_channels.get("moderation", 0))
+        if channel_id:
+            await log_to_channel(
+                self.bot,
+                channel_id,
+                "🔄 User synchronisiert",
+                f"**Moderator:** {interaction.user}\n"
+                f"**User:** {user.mention}\n"
+                f"**Aktionen:**\n" + "\n".join(actions),
+                discord.Color.orange()
+            )
+        logger.warning(f"SYNC_USER | {interaction.user} -> {user} | {', '.join(actions)}")
+        await interaction.followup.send(
+        f"🔄 **Synchronisation abgeschlossen ({len(actions)} Aktion(en))**:\n"
+        + "\n".join(f"• {a}" for a in actions),
+        ephemeral=True
+        )
+
 async def setup(bot: commands.Bot):    
     await bot.add_cog(Moderation(bot))
-    
-
-
-
-

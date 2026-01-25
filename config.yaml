@@ -63,7 +63,9 @@ permissions:
   role_remove:
     min_level: 10
   clear:
-    min_level: 10  
+    min_level: 10
+  sync_user:
+    min_level: 30
 
 security:
   lock_owner_actions: true
