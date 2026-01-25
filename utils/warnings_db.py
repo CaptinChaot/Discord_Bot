@@ -193,3 +193,39 @@ def clear_ban(guild_id: int, user_id: int):
             """,
             (guild_id, user_id)
         )
+
+def get_user_status(guild_id: int, user_id: int):
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM warnings
+                 WHERE guild_id = ? AND user_id = ?) AS warn_count,
+                active_timeout_until,
+                active_ban,
+                reason
+            FROM punishments
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id, guild_id, user_id)
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return {
+            "warns": 0,
+            "timeout_until": None,
+            "active_ban": False,
+            "reason": None,
+        }
+
+    warns, timeout_until, active_ban, reason = row
+    return {
+        "warns": warns,
+        "timeout_until": (
+            datetime.fromisoformat(timeout_until)
+            if timeout_until else None
+        ),
+        "active_ban": bool(active_ban),
+        "reason": reason,
+    }

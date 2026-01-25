@@ -12,7 +12,7 @@ from utils.moderation_utils import can_auto_action, handle_auto_actions
 from utils.decorators import require_perm
 from utils.warnings_db import (
     add_warning, count_warnings, delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout, clear_ban, clear_timeout)
+    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout, clear_ban, clear_timeout, get_user_status)
 from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban)
 
 
@@ -525,9 +525,13 @@ class Moderation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        #basic info embed
+        #DB status
+        status = get_user_status(interaction.guild.id, user.id)
+
+        #basic info 
         account_created = discord.utils.format_dt(user.created_at, style="F")
         joined_at = discord.utils.format_dt(user.joined_at, style="F") if user.joined_at else "Unbekannt"
+
         #warnings count
         total_warnings = count_warnings(
             guild_id=interaction.guild.id,
@@ -537,15 +541,21 @@ class Moderation(commands.Cog):
             guild_id=interaction.guild.id,
             user_id=user.id
         ) or "Keine"
+
         #timeout info
-        is_timed_out = user.is_timed_out()
-        timeout_until = (discord.utils.format_dt(user.timed_out_until, style="F") 
-                         if is_timed_out else "-"
+        discord_timeout = user.is_timed_out()
+        discord_timeout_until = (discord.utils.format_dt(user.timed_out_until, style="F") 
+                         if discord_timeout else "-"
         )
         
-        embed = discord.Embed(
-            title=f"ℹ️ Userinfo: {user}",
-            color=discord.Color.blue(),
+        db_timeout_until = (
+            discord.utils.format_dt(status["timeout_until"], style="F")
+            if status["timeout_until"] else "-"
+        )
+
+        embed = discord.Embed(  
+            title="fℹ️ Userinfo: {user}",
+            color=discord.Color.blue,
             timestamp=utcnow()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -553,22 +563,44 @@ class Moderation(commands.Cog):
         embed.add_field(name="User-ID", value=str(user.id), inline=False)
         embed.add_field(name="Account erstellt am", value=account_created, inline=False)
         embed.add_field(name="Server beigetreten am", value=joined_at, inline=False)
-        
-        embed.add_field(name="Moderation", 
-                        value=(
-                        f"**Letzte Auto-Aktion:** {last_action}\n"
-                        f"**Verwarnungen:** {total_warnings}\n"
-                        f"**Aktiver Timeout:** {'Ja' if is_timed_out else 'Nein'}\n"),
-                    inline=False)
-        
-        if is_timed_out:
-            embed.add_field(name="Timeout bis", value=timeout_until, inline=False)
 
-        embed.add_field(name="Top-Rolle", value=user.top_role.mention if user.top_role else "—", inline=False)
-        await interaction.followup.send(
-            embed=embed,
-            ephemeral=True
+        # --- Moderations-Historie ---
+        embed.add_field(
+            name="📜 Moderation (Historie)",
+            value=(
+                f"**Verwarnungen:** {total_warnings}\n"
+                f"**Letzte Auto-Aktion:** {last_action}"
+            ),
+            inline=False
         )
+
+        #--- Aktueller Status ---
+        embed.add_field(
+            name="🚨 Aktueller Status",
+            value=(
+                f"**Discord Timeout:** {'Ja' if discord_timeout else 'Nein'}\n"
+                f"**DB Timeout:** {'Ja' if status['timeout_until'] else 'Nein'}\n"
+                f"**Bann (DB):** {'Ja' if status['active_ban'] else 'Nein'}\n"
+                f"**Grund:** {status['reason'] or '—'}"
+            ),
+            inline=False
+        )
+        # --- Timeout Details (optional, aber nice) ---
+        if discord_timeout or status["timeout_until"]:
+            embed.add_field(
+                name="⏱️ Timeout-Details",
+                value=(
+                    f"**Discord:** {discord_timeout_until}\n"
+                    f"**DB:** {db_timeout_until}"
+                ),
+                inline=False
+                )
+        embed.add_field(
+            name="Top-Rolle",
+            value=user.top_role.mention if user.top_role else "—",
+            inline=False
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="clear", description="Löscht Nachrichten in einem Kanal")
     @app_commands.describe(
