@@ -1,7 +1,6 @@
 import discord
 from enum import IntEnum
 from utils.config import config
-from .permissions import PermLevel
 
 
 class PermLevel(IntEnum):

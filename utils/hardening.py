@@ -1,5 +1,6 @@
 import discord
-from utils.permissions import get_user_perm_level, PermLevel
+from utils.perm_level import PermLevel
+from utils.permissions import get_user_perm_level
 from utils.logger import logger
 from utils.config import config
 

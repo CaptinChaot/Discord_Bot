@@ -12,6 +12,7 @@ from utils.hardening import STAFF_ROLE_IDS
 from utils.config import config
 from discord import app_commands
 from utils.warnings_db import init_db
+from utils.hardening import STAFF_ROLE_IDS
 
 
 load_dotenv()
@@ -54,8 +55,7 @@ async def on_ready():
 
     STAFF_ROLE_IDS.clear()
 
-    staff_role_keys = config.role_management.get("staff_roles", [])
-    for key in staff_role_keys:
+    for key in config.role_management.get("staff_roles", []):
         role_id = config.roles.get(key)
         if role_id:
             STAFF_ROLE_IDS.add(int(role_id))
