@@ -4,7 +4,13 @@ from discord.utils import utcnow
 
 from utils.permissions import get_user_perm_level, PermLevel
 from utils.logger import logger, log_to_channel
-from utils.warnings_db import get_last_auto_action, set_last_auto_action
+from utils.warnings_db import (
+    add_warning,
+    count_warnings,
+    get_last_auto_action,
+    mark_auto_action,
+    auto_action_allowed,
+)
 from utils.config import config
 
 
@@ -42,6 +48,7 @@ async def handle_auto_actions(*,
     interaction: discord.Interaction,
     user: discord.Member,
     total_warnings: int,
+    warning_id: int,
     timeout_warn: int,
     kick_warn: int,
     ban_warn: int,
@@ -56,10 +63,19 @@ async def handle_auto_actions(*,
         user_id=user.id
     )
 
+    if not auto_action_allowed(
+        last_action,
+        config["moderation"]["auto_action_cooldown"]
+    ):
+        logger.info(f"AUTO ACTION BLOCKED (COOLDOWN) | {user}")
+        return
+    last_type = last_action["type"] if last_action else None
     channel_id = int(config.log_channels.get("moderation", 0))
 
     # 🔨 BAN
-    if total_warnings >= ban_warn and last_action != "ban":
+    if total_warnings >= ban_warn:
+        if last_action != "kick":
+            return False
         try:
             await user.ban(
                 reason="Automatischer Bann durch Verwarnungen",
@@ -78,12 +94,15 @@ async def handle_auto_actions(*,
                 f"**Warns:** {total_warnings}",
                 discord.Color.dark_red()
             )
-        set_last_auto_action(interaction.guild.id, user.id, "ban")
+        mark_auto_action(warning_id, "ban")
         logger.info(f"AUTO BANN | {user}")
         return True
 
     # 👢 KICK
-    if total_warnings >= kick_warn and last_action not in ("kick", "ban"):
+    if total_warnings >= kick_warn:
+        if last_action in ("kick", "ban"):
+            return
+        
         try:
             await user.kick(reason="Automatischer Kick durch Verwarnungen")
         except discord.Forbidden:
@@ -99,12 +118,15 @@ async def handle_auto_actions(*,
                 f"**Warns:** {total_warnings}",
                 discord.Color.orange()
             )
-        set_last_auto_action(interaction.guild.id, user.id, "kick")    
+        mark_auto_action(warning_id, "kick")    
         logger.info(f"AUTO KICK | {user}")
         return True
 
     # ⏱️ TIMEOUT
-    if total_warnings >= timeout_warn and last_action not in ("timeout", "kick", "ban"):
+    if total_warnings >= timeout_warn:
+        if last_type in ("timeout", "kick", "ban"):
+            return False
+        
         until = utcnow() + timedelta(seconds=timeout_duration)
         try:
             await user.timeout(until, reason="Automatischer Timeout durch Verwarnungen")
@@ -121,7 +143,7 @@ async def handle_auto_actions(*,
                 f"**Dauer:** {timeout_duration}s",
                 discord.Color.gold()
             )
-        set_last_auto_action(interaction.guild.id, user.id, "timeout")    
+        mark_auto_action(interaction.guild.id, user.id, "timeout")    
         logger.info(f"AUTO TIMEOUT | {user}")
         return True
     return False

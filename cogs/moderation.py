@@ -12,12 +12,9 @@ from utils.sync import sync_user_state
 from utils.moderation_utils import can_auto_action, handle_auto_actions
 from utils.decorators import require_perm
 from utils.warnings_db import (
-    add_warning, count_warnings, delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout, clear_ban, clear_timeout, get_user_status)
+    add_warning, count_warnings, delete_warnings as db_delete_warnings, get_warning_by_id,
+    delete_warning_by_id, get_last_auto_action, get_last_warning_id, save_ban,save_timeout, clear_ban, clear_timeout, get_user_status)
 from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban, get_auto_action_preview)
-
-
-
 
 
 mod_cfg = config.moderation
@@ -138,11 +135,11 @@ class Moderation(commands.Cog):
         reason: str
     ):
         await interaction.response.defer(ephemeral=True)
-
-        allowed, reason = can_moderate(interaction=interaction, target=user, action="warn")
+    # --- Permission / Hierarchie ---
+        allowed, deny_reason = can_moderate(interaction=interaction, target=user, action="warn")
         if not allowed:
             await interaction.followup.send(
-                f"❌ {reason}",
+                f"❌ {deny_reason}",
                 ephemeral=True
             )
             return
@@ -157,7 +154,7 @@ class Moderation(commands.Cog):
             pass  # DMs aus → egal, Log zählt
 
         # Warnung in DB speichern
-        add_warning(
+        warning_id = add_warning(
             guild_id=interaction.guild.id,
             user_id=user.id,
             moderator_id=interaction.user.id,
@@ -176,6 +173,7 @@ class Moderation(commands.Cog):
                 interaction=interaction,
                 user=user,
                 total_warnings=total_warnings,
+                warning_id=warning_id,
                 timeout_warn=timeout_warn,
                 kick_warn=kick_warn,
                 ban_warn=ban_warn,
@@ -323,11 +321,18 @@ class Moderation(commands.Cog):
         )
         if warn_id is None:
             await interaction.followup.send(
-                f" {user.mention} hat keine Verwarnungen.",
+                f"{user.mention} hat keine Verwarnungen.",
                 ephemeral=True
             )
             return
-        
+        auto_action_type = get_warning_by_id(warn_id)
+        if auto_action_type:
+            await interaction.followup.send(
+                "❌ Diese Verwarnung hat eine automatische Maßnahme ausgelöst "
+                "und kann nicht einfach gelöscht werden.",
+                ephemeral=True
+            )
+            return
         # Letzte Verwarnung löschen
         delete_warning_by_id(warn_id)
 
