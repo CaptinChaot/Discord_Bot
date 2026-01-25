@@ -12,7 +12,7 @@ from utils.moderation_utils import can_auto_action, handle_auto_actions
 from utils.decorators import require_perm
 from utils.warnings_db import (
     add_warning, count_warnings, delete_warnings as db_delete_warnings,
-    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout)
+    delete_warning_by_id, get_last_warning_id,get_last_auto_action, save_ban,save_timeout, clear_ban, clear_timeout)
 from utils.moderation_actions import (safe_timeout, safe_untimeout, safe_kick, safe_ban, safe_unban)
 
 
@@ -105,6 +105,7 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
+        clear_timeout(interaction.guild.id, user,id)
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id:
@@ -493,7 +494,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             return
-
+        clear_ban(interaction.guild.id, user.id)
+        logger.warning(f"CLEAR_BAN CALLED for {user.id}")
         # Loggen
         channel_id = int(config.log_channels.get("moderation", 0))
         if channel_id:
