@@ -162,7 +162,8 @@ def clear_timeout(guild_id: int, user_id: int):
         conn.execute(
             """
             UPDATE punishments
-            SET active_timeout_until = NULL
+            SET active_timeout_until = NULL,
+                reason = NULL
             WHERE guild_id = ? AND user_id = ?
             """,
             (guild_id, user_id)
