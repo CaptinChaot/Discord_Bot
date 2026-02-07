@@ -87,7 +87,7 @@ tickets:
   #Wer darf Tickets sehen
   support_min_level: 5
   #Channel-Nameing
-  channel_preffix: "Ticket"
+  channel_prefix: "Ticket"
   #Archiv-Verhalten
   archive:
     hide_from_user: true

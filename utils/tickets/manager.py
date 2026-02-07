@@ -65,7 +65,7 @@ async def create_ticket_channel(
         read_message_history=True,
     )
 
-    prefix = tickets_cfg.get("channel_preffix", "ticket").lower()
+    prefix = tickets_cfg.get("channel_prefix", "ticket").lower()
     channel_name = f"{prefix}-{ticket_type}-{user.name}".lower()[:90]
     topic = f"OPEN | User:{user.id} | Type:{ticket_type}"
 
