@@ -77,3 +77,18 @@ moderation:
   warn_ban_threshold: 5
   warn_timeout_threshold: 2
   warn_timeout_duration: 300 # in seconds
+
+tickets:
+  enabled: true
+  #Kategorie für offene Tickets
+  category_open: 1469741779346657425
+  #Kategorie für closed Tickets
+  category_closed: 1469741852507766927
+  #Wer darf Tickets sehen
+  support_min_level: 5
+  #Channel-Nameing
+  channel_preffix: "Ticket"
+  #Archiv-Verhalten
+  archive:
+    hide_from_user: true
+    lock_user_message: true
