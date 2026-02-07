@@ -4,16 +4,20 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+from utils.config import config
 from utils.tickets.views import TicketPanelView, TicketChannelView
 from utils.tickets.manager import create_ticket_channel, claim_ticket, archive_ticket
 from utils.permissions import get_user_perm_level, PermLevel
+
+
+GUILD = discord.Object(id=config.guild_id)
 
 
 class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Persistent Views (wichtig für Restart!)
+        # Persistent Views (überleben Restart)
         self.bot.add_view(TicketPanelView())
         self.bot.add_view(TicketChannelView())
 
@@ -25,6 +29,7 @@ class Tickets(commands.Cog):
         name="send_ticket_panel",
         description="Sendet das Ticket-Panel (DEV/OWNER only)"
     )
+    @app_commands.guilds(GUILD)
     async def send_ticket_panel(self, interaction: discord.Interaction):
         if get_user_perm_level(interaction.user) < PermLevel.DEV:
             await interaction.response.send_message(
@@ -55,13 +60,14 @@ class Tickets(commands.Cog):
         )
 
     # ==================================================
-    # Slash Sync (OWNER)
+    # /sync_tickets (OWNER)
     # ==================================================
 
     @app_commands.command(
         name="sync_tickets",
         description="Synchronisiert Ticket Slash Commands (OWNER)"
     )
+    @app_commands.guilds(GUILD)
     async def sync_tickets(self, interaction: discord.Interaction):
         if interaction.user.id != interaction.guild.owner_id:
             await interaction.response.send_message(
@@ -70,9 +76,13 @@ class Tickets(commands.Cog):
             )
             return
 
-        await self.bot.tree.sync(guild=interaction.guild)
-        await interaction.response.send_message(
-            "✅ Ticket-Slash-Commands synchronisiert.",
+        # WICHTIG: defer → kein Discord-Timeout
+        await interaction.response.defer(ephemeral=True)
+
+        synced = await self.bot.tree.sync(guild=interaction.guild)
+
+        await interaction.followup.send(
+            f"✅ {len(synced)} Ticket-Slash-Commands synchronisiert.",
             ephemeral=True
         )
 
@@ -82,10 +92,6 @@ class Tickets(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ticket_submit(self, interaction: discord.Interaction, data: dict):
-        """
-        Wird aus TicketDescriptionModal via:
-        interaction.client.dispatch("ticket_submit", interaction, data)
-        """
         try:
             channel = await create_ticket_channel(
                 bot=self.bot,
@@ -95,7 +101,6 @@ class Tickets(commands.Cog):
                 description=data["description"],
             )
 
-            # Claim / Close Buttons posten
             await channel.send(
                 "Support kann das Ticket jetzt **claimen** oder **schließen**:",
                 view=TicketChannelView()
@@ -128,7 +133,6 @@ class Tickets(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # ---------- CLAIM ----------
             if custom_id == "ticket_claim":
                 await claim_ticket(
                     bot=self.bot,
@@ -140,7 +144,6 @@ class Tickets(commands.Cog):
                     ephemeral=True
                 )
 
-            # ---------- CLOSE / ARCHIVE ----------
             elif custom_id == "ticket_close":
                 await archive_ticket(
                     bot=self.bot,
