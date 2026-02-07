@@ -6,6 +6,10 @@ from discord.ui import View, Select, Modal, TextInput, Button
 from utils.tickets.constants import TICKET_TYPES
 
 
+# =========================
+# Modal: Ticket Beschreibung
+# =========================
+
 class TicketDescriptionModal(Modal):
     def __init__(self, ticket_type: str):
         super().__init__(title="Ticket erstellen")
@@ -20,13 +24,26 @@ class TicketDescriptionModal(Modal):
         self.add_item(self.description)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Übergabe an Cog (keine Logik hier!)
-        interaction.ticket_data = {
-            "type": self.ticket_type,
-            "description": self.description.value,
-        }
+        # ❗ WICHTIG:
+        # discord.Interaction ist __slots__-basiert
+        # → KEINE neuen Attribute setzen!
+        # Stattdessen: eigenes Event dispatchen
+
         await interaction.response.defer(ephemeral=True)
 
+        interaction.client.dispatch(
+            "ticket_submit",
+            interaction,
+            {
+                "type": self.ticket_type,
+                "description": self.description.value,
+            }
+        )
+
+
+# =========================
+# Select: Ticket-Typ Auswahl
+# =========================
 
 class TicketTypeSelect(Select):
     def __init__(self):
@@ -51,20 +68,38 @@ class TicketTypeSelect(Select):
         )
 
 
+# =========================
+# Panel View (öffentlich)
+# =========================
+
 class TicketPanelView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(TicketTypeSelect())
 
 
+# =========================
+# Buttons im Ticket-Channel
+# =========================
+
 class TicketClaimButton(Button):
     def __init__(self):
-        super().__init__(label="Claim", style=discord.ButtonStyle.primary, emoji="🖐", custom_id="ticket_claim")
+        super().__init__(
+            label="Claim",
+            style=discord.ButtonStyle.primary,
+            emoji="🖐",
+            custom_id="ticket_claim"
+        )
 
 
 class TicketCloseButton(Button):
     def __init__(self):
-        super().__init__(label="Close", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close")
+        super().__init__(
+            label="Close",
+            style=discord.ButtonStyle.danger,
+            emoji="🔒",
+            custom_id="ticket_close"
+        )
 
 
 class TicketChannelView(View):

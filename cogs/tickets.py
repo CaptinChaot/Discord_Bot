@@ -1,8 +1,11 @@
+# cogs/tickets.py
+
 import discord
 from discord.ext import commands
 from discord import app_commands
 
-from utils.tickets.views import TicketPanelView
+from utils.tickets.views import TicketPanelView, TicketChannelView
+from utils.tickets.manager import create_ticket_channel, claim_ticket, archive_ticket
 from utils.permissions import get_user_perm_level, PermLevel
 
 
@@ -10,16 +13,19 @@ class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # =========================
-    # /send_ticket_panel (DEV/OWNER)
-    # =========================
+        # Persistent Views (wichtig für Restart!)
+        self.bot.add_view(TicketPanelView())
+        self.bot.add_view(TicketChannelView())
+
+    # ==================================================
+    # /send_ticket_panel (DEV+)
+    # ==================================================
 
     @app_commands.command(
         name="send_ticket_panel",
         description="Sendet das Ticket-Panel (DEV/OWNER only)"
     )
     async def send_ticket_panel(self, interaction: discord.Interaction):
-        # ---- Permission Check (DEIN System) ----
         if get_user_perm_level(interaction.user) < PermLevel.DEV:
             await interaction.response.send_message(
                 "❌ Dafür hast du keine Berechtigung.",
@@ -48,9 +54,9 @@ class Tickets(commands.Cog):
             ephemeral=True
         )
 
-    # =========================
-    # Sync (nur Owner, optional)
-    # =========================
+    # ==================================================
+    # Slash Sync (OWNER)
+    # ==================================================
 
     @app_commands.command(
         name="sync_tickets",
@@ -69,6 +75,88 @@ class Tickets(commands.Cog):
             "✅ Ticket-Slash-Commands synchronisiert.",
             ephemeral=True
         )
+
+    # ==================================================
+    # EVENT: Ticket aus Modal (views.py → dispatch)
+    # ==================================================
+
+    @commands.Cog.listener()
+    async def on_ticket_submit(self, interaction: discord.Interaction, data: dict):
+        """
+        Wird aus TicketDescriptionModal via:
+        interaction.client.dispatch("ticket_submit", interaction, data)
+        """
+        try:
+            channel = await create_ticket_channel(
+                bot=self.bot,
+                guild=interaction.guild,
+                user=interaction.user,
+                ticket_type=data["type"],
+                description=data["description"],
+            )
+
+            # Claim / Close Buttons posten
+            await channel.send(
+                "Support kann das Ticket jetzt **claimen** oder **schließen**:",
+                view=TicketChannelView()
+            )
+
+            await interaction.followup.send(
+                f"✅ Dein Ticket wurde erstellt: {channel.mention}",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Ticket konnte nicht erstellt werden: {type(e).__name__}: {e}",
+                ephemeral=True
+            )
+
+    # ==================================================
+    # COMPONENTS: Claim / Close Buttons
+    # ==================================================
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.component:
+            return
+
+        custom_id = interaction.data.get("custom_id")
+        if custom_id not in ("ticket_claim", "ticket_close"):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # ---------- CLAIM ----------
+            if custom_id == "ticket_claim":
+                await claim_ticket(
+                    bot=self.bot,
+                    channel=interaction.channel,
+                    claimer=interaction.user
+                )
+                await interaction.followup.send(
+                    "✅ Ticket wurde geclaimed.",
+                    ephemeral=True
+                )
+
+            # ---------- CLOSE / ARCHIVE ----------
+            elif custom_id == "ticket_close":
+                await archive_ticket(
+                    bot=self.bot,
+                    channel=interaction.channel,
+                    closed_by=interaction.user
+                )
+                await interaction.followup.send(
+                    "🗂 Ticket wurde archiviert.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Aktion fehlgeschlagen: {type(e).__name__}: {e}",
+                ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot):
