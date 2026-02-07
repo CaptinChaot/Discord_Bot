@@ -11,10 +11,11 @@ from utils.tickets.constants import TICKET_TYPES
 # Helpers
 # ==================================================
 
-def _ticket_cfg():
-    if not hasattr(config, "tickets"):
+def _ticket_cfg() -> dict:
+    tickets_cfg = config.get("tickets")
+    if not tickets_cfg:
         raise RuntimeError("tickets-Block fehlt in config.yaml")
-    return config.tickets
+    return tickets_cfg
 
 
 def _is_support_plus(member: discord.Member) -> bool:
