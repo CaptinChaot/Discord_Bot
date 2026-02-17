@@ -17,9 +17,13 @@ class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Persistent Views (überleben Restart)
-        self.bot.add_view(TicketPanelView())
-        self.bot.add_view(TicketChannelView())
+        # Persistent Views werden nur registriert, wenn Feature aktiv ist
+        if config.features.get("tickets", False):
+            self.bot.add_view(TicketPanelView())
+            self.bot.add_view(TicketChannelView())
+            print("Tickets: Persistent Views registriert")
+        else:
+            print("Tickets: Persistent Views NICHT registriert – Feature deaktiviert")
 
     # ==================================================
     # /send_ticket_panel (DEV+)
@@ -31,6 +35,13 @@ class Tickets(commands.Cog):
     )
     @app_commands.guilds(GUILD)
     async def send_ticket_panel(self, interaction: discord.Interaction):
+        if not config.features.get("tickets", False):
+            await interaction.response.send_message(
+                "Ticket-System ist aktuell deaktiviert.",
+                ephemeral=True
+            )
+            return
+
         if get_user_perm_level(interaction.user) < PermLevel.DEV:
             await interaction.response.send_message(
                 "❌ Dafür hast du keine Berechtigung.",
@@ -69,6 +80,13 @@ class Tickets(commands.Cog):
     )
     @app_commands.guilds(GUILD)
     async def sync_tickets(self, interaction: discord.Interaction):
+        if not config.features.get("tickets", False):
+            await interaction.response.send_message(
+                "Ticket-System ist aktuell deaktiviert.",
+                ephemeral=True
+            )
+            return
+
         if interaction.user.id != interaction.guild.owner_id:
             await interaction.response.send_message(
                 "❌ Nur der Server-Owner.",
@@ -76,7 +94,6 @@ class Tickets(commands.Cog):
             )
             return
 
-        # WICHTIG: defer → kein Discord-Timeout
         await interaction.response.defer(ephemeral=True)
 
         synced = await self.bot.tree.sync(guild=interaction.guild)
@@ -92,6 +109,13 @@ class Tickets(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ticket_submit(self, interaction: discord.Interaction, data: dict):
+        if not config.features.get("tickets", False):
+            await interaction.followup.send(
+                "Ticket-System ist aktuell deaktiviert – bitte später erneut versuchen.",
+                ephemeral=True
+            )
+            return
+
         try:
             channel = await create_ticket_channel(
                 bot=self.bot,
@@ -130,6 +154,13 @@ class Tickets(commands.Cog):
         if custom_id not in ("ticket_claim", "ticket_close"):
             return
 
+        if not config.features.get("tickets", False):
+            await interaction.response.send_message(
+                "Ticket-System ist aktuell deaktiviert – Aktion nicht möglich.",
+                ephemeral=True
+            )
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -163,4 +194,9 @@ class Tickets(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Tickets(bot))
+    # Cog nur laden, wenn Feature aktiv ist (zusätzlicher Schutz)
+    if config.features.get("tickets", False):
+        await bot.add_cog(Tickets(bot))
+        print("Tickets-Cog geladen")
+    else:
+        print("Tickets-Cog NICHT geladen – Feature deaktiviert")
