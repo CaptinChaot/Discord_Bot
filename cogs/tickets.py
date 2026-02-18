@@ -18,7 +18,7 @@ class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Persistent Views nur EINMAL registrieren (verhindert Duplikat-Fehler)
+        # Persistent Views nur EINMAL registrieren
         if not hasattr(bot, "_tickets_views_added"):
             if config.features.get("tickets", False):
                 bot.add_view(TicketPanelView())
@@ -97,10 +97,6 @@ class Tickets(commands.Cog):
             return
 
         # KEIN zweites defer – Modal hat schon defer gemacht!
-        # Falls du sicher gehen willst:
-        # if not interaction.response.is_done():
-        #     await interaction.response.defer(ephemeral=True)
-
         try:
             channel = await create_ticket_channel(
                 bot=self.bot,
@@ -137,7 +133,7 @@ class Tickets(commands.Cog):
 
         custom_id = interaction.data.get("custom_id")
         if custom_id not in ("ticket_claim", "ticket_close"):
-            return  # Andere Buttons komplett ignorieren
+            return
 
         if not config.features.get("tickets", False):
             await interaction.response.send_message("Ticket-System deaktiviert.", ephemeral=True)
