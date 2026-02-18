@@ -159,11 +159,14 @@ class Tickets(commands.Cog):
                     closed_by=interaction.user
                 )
                 await interaction.followup.send("🗂 Ticket archiviert.", ephemeral=True)
+        except PermissionError as perm_err:
+            logger.info(f"Kein Claim/Close möglich – fehlende Berechtigung: {perm_err}")
+            await interaction.followup.send(f"❌ {perm_err} - Du bracuhst Supportrechte oder höher.", ephemeral=True)
 
         except Exception as e:
             logger.exception(f"Ticket-Button Fehler ({custom_id}): {e}")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Fehler: {str(e)[:100]}", ephemeral=True)
+                await interaction.response.send_message(f"❌ UnerwarteterFehler: {str(e)[:100]}", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
