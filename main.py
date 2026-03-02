@@ -76,6 +76,7 @@ if bot_env == "dev":
     config._data["features"]["roles"]                 = True
     config._data["features"]["tickets"]               = True   # ← zum Debuggen True
     config._data["features"]["twitch"]                = True
+    config._data["features"]["member_count"]          = True
 
     logger.info("Dev-Modus: Alle Features & Test-IDs aktiviert – Chaos erlaubt! 🚧")
 
@@ -117,6 +118,7 @@ class ChaosBot(commands.Bot):
             "dev":         True,  # ← immer laden für Sync & Debugging
             "welcome":     True,  # ← immer laden
             "twitch_live": config.features.get("twitch_notifications", False), # ← Twitch Benachrichtigungen nur laden, wenn aktiviert
+            "member_count": config.features.get("member_count", False), # ← Member Count nur laden, wenn aktiviert
         }
 
         loaded_cogs = []
