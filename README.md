@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)
 ![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2?logo=discord)
-![License](https://img.shields.io/badge/License-None-lightgrey)
+![License](https://img.shields.io/badge/License-AGPL%20v3-blue)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
 ---
