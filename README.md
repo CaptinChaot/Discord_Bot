@@ -67,7 +67,7 @@ Folgende Berechtigungen werden für den vollen Funktionsumfang benötigt:
 #### 1. Repository klonen
 ```bash
 git clone https://github.com/CaptinChaot/Discord_Bot.git
-cd chaosbot
+cd Discord_Bot
 ```
 
 #### 2. Umgebungsvariablen setzen
@@ -287,7 +287,7 @@ The following permissions are required for full functionality:
 #### 1. Clone the repository
 ```bash
 git clone https://github.com/CaptinaChaot/Discord_Bot.git
-cd chaosbot
+cd Discord_Bot
 ```
 
 #### 2. Set environment variables
