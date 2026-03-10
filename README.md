@@ -286,7 +286,7 @@ The following permissions are required for full functionality:
 
 #### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/chaosbot.git
+git clone https://github.com/CaptinaChaot/Discord_Bot.git
 cd chaosbot
 ```
 
