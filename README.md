@@ -66,7 +66,7 @@ Folgende Berechtigungen werden für den vollen Funktionsumfang benötigt:
 
 #### 1. Repository klonen
 ```bash
-git clone https://github.com/dein-username/chaosbot.git
+git clone https://github.com/CaptinChaot/Discord_Bot.git
 cd chaosbot
 ```
 
